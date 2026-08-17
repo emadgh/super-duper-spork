@@ -1,0 +1,333 @@
+    const outputs = Object.entries(event?.outputs ?? {}).filter(([, item]) => portTypesCompatible(port.type, item.type));
+    if (!outputs.length) select.append(option("", "payload"));
+    for (const [name] of outputs) select.append(option(name, name));
+    select.value = binding.path;
+    select.addEventListener("change", () => onChange({ kind: "event", path: select.value }));
+  }
+
+  if (binding.kind === "output") {
+    const candidates = previousOutputOptions(rule, step, port.type);
+    for (const item of candidates) select.append(option(`${item.stepId}|${item.name}`, item.label));
+    select.value = `${binding.stepId}|${binding.name}`;
+    select.addEventListener("change", () => {
+      const [stepId, name] = select.value.split("|");
+      onChange({ kind: "output", stepId, name });
+    });
+  }
+
+  if (!select.options.length) select.append(option("", "No compatible source"));
+  host.append(select);
+}
+
+function renderOutputPort(step: ActionStep, name: string, port: PortDefinition): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "port-row";
+  row.innerHTML = `<div class="port-name"><span class="port-dot ${port.type}"></span>${escapeHtml(port.label ?? name)}</div>`;
+
+  const select = document.createElement("select");
+  select.className = "output-target";
+  select.append(option("", "Available to next action"));
+  for (const key of matchingBlackboardKeys(port.type)) select.append(option(key, `Write → ${key}`));
+  select.value = step.outputs[name]?.blackboardKey ?? "";
+  select.addEventListener("change", () => {
+    step.outputs[name] = select.value ? { blackboardKey: select.value } : {};
+    void persistManifest();
+  });
+  row.append(select);
+  return row;
+}
+
+function renderBlackboard(): void {
+  blackboardList.replaceChildren();
+  if (!project) return;
+  const entries = Object.entries(project.manifest.blackboard);
+  if (!entries.length) {
+    blackboardList.append(emptyMessage("No project variables yet."));
+    return;
+  }
+
+  for (const [key, entry] of entries) {
+    const row = document.createElement("div");
+    row.className = "blackboard-row";
+
+    const nameInput = document.createElement("input");
+    nameInput.value = key;
+    nameInput.addEventListener("change", () => void renameBlackboardKey(key, nameInput.value));
+
+    const type = document.createElement("select");
+    for (const value of ["number", "string", "boolean", "any"] as PortType[]) type.append(option(value, value));
+    type.value = entry.type;
+    type.addEventListener("change", () => {
+      entry.type = type.value as PortType;
+      entry.value = coerceValue(entry.value, entry.type);
+      renderBlackboard();
+      void persistManifest();
+    });
+
+    const valueInput = inputForPort({ type: entry.type }, entry.value);
+    valueInput.title = "Project default value";
+    valueInput.addEventListener("change", () => {
+      entry.value = readPortInput(valueInput, entry.type);
+      void persistManifest();
+    });
+
+    const liveValue = document.createElement("span");
+    liveValue.className = "blackboard-live-value";
+    const runtimeEntry = liveBlackboard?.[key];
+    liveValue.textContent = runtimeEntry ? formatPrimitive(runtimeEntry.value) : "—";
+    liveValue.title = runtimeEntry ? "Current runtime value" : "Run the project to inspect the runtime value";
+
+    const remove = document.createElement("button");
+    remove.className = "delete-mini";
+    remove.textContent = "×";
+    remove.title = "Delete variable";
+    remove.addEventListener("click", () => void deleteBlackboardKey(key));
+
+    row.append(nameInput, type, valueInput, liveValue, remove);
+    blackboardList.append(row);
+  }
+}
+
+async function addBlackboardVariable(): Promise<void> {
+  if (!project) return;
+  const raw = prompt("Blackboard variable name", "value")?.trim();
+  if (!raw) return;
+  const key = safeVariableName(raw);
+  if (!key) return;
+  if (project.manifest.blackboard[key]) {
+    alert("A blackboard variable with this name already exists.");
+    return;
+  }
+  project.manifest.blackboard[key] = { type: "number", value: 0 };
+  await persistManifest();
+  renderBlackboard();
+  renderRules();
+}
+
+async function renameBlackboardKey(oldKey: string, rawNewKey: string): Promise<void> {
+  if (!project) return;
+  const newKey = safeVariableName(rawNewKey);
+  if (!newKey || newKey === oldKey) {
+    renderBlackboard();
+    return;
+  }
+  if (project.manifest.blackboard[newKey]) {
+    alert("A blackboard variable with this name already exists.");
+    renderBlackboard();
+    return;
+  }
+
+  project.manifest.blackboard[newKey] = project.manifest.blackboard[oldKey];
+  delete project.manifest.blackboard[oldKey];
+  for (const rule of project.manifest.rules) {
+    for (const step of rule.actions) {
+      for (const [name, binding] of Object.entries(step.inputs)) {
+        if (binding.kind === "blackboard" && binding.key === oldKey) step.inputs[name] = { kind: "blackboard", key: newKey };
+      }
+      for (const output of Object.values(step.outputs)) if (output.blackboardKey === oldKey) output.blackboardKey = newKey;
+    }
+  }
+  await persistManifest();
+  renderBlackboard();
+  renderRules();
+}
+
+async function deleteBlackboardKey(key: string): Promise<void> {
+  if (!project || !confirm(`Delete blackboard variable "${key}"?`)) return;
+  delete project.manifest.blackboard[key];
+  for (const rule of project.manifest.rules) {
+    for (const step of rule.actions) {
+      for (const [name, binding] of Object.entries(step.inputs)) {
+        if (binding.kind === "blackboard" && binding.key === key) step.inputs[name] = { kind: "literal", value: 0 };
+      }
+      for (const output of Object.values(step.outputs)) if (output.blackboardKey === key) delete output.blackboardKey;
+    }
+  }
+  await persistManifest();
+  renderBlackboard();
+  renderRules();
+}
+
+async function removeRule(ruleId: string): Promise<void> {
+  if (!project) return;
+  project.manifest.rules = project.manifest.rules.filter((item) => item.id !== ruleId);
+  await persistManifest();
+  renderRules();
+}
+
+async function persistManifest(): Promise<void> {
+  if (!project) return;
+  try {
+    const updated = await api.saveManifest(project.manifest.id, project.manifest);
+    project.manifest = updated.manifest;
+    renderProjectMeta();
+    renderDiagram();
+    setGlobalStatus("Saved");
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  }
+}
+
+async function runProject(): Promise<void> {
+  if (!project) return;
+  if (dirty) {
+    await saveSelectedObject();
+    if (dirty) return;
+  }
+
+  runtime?.dispose();
+  traceRows = [];
+  renderTrace();
+  liveBlackboard = null;
+  runtime = new EventRuntime(
+    definitions,
+    project.manifest.instances,
+    project.manifest.rules,
+    project.manifest.blackboard,
+    {
+      onTrace: appendTrace,
+      onBlackboardChange: (next) => {
+        liveBlackboard = next;
+        renderBlackboard();
+      },
+    },
+  );
+  liveBlackboard = runtime.getBlackboard();
+  renderBlackboard();
+  runtime.mountPreview(previewHost);
+  previewPanel.classList.add("is-running");
+  setGlobalStatus("Runtime running");
+}
+
+function appendTrace(trace: RuntimeTrace): void {
+  traceRows.push(trace);
+  if (traceRows.length > 80) traceRows.shift();
+  renderTrace();
+  traceList.scrollTop = traceList.scrollHeight;
+}
+
+function renderTrace(): void {
+  traceList.replaceChildren();
+  if (!traceRows.length) {
+    traceList.append(emptyInline("Run the project to inspect events and actions."));
+    return;
+  }
+  for (const trace of traceRows) {
+    const row = document.createElement("div");
+    row.className = `trace-row ${trace.kind}`;
+    row.innerHTML = `<span class="trace-kind">${escapeHtml(trace.kind)}</span><span>${escapeHtml(trace.label)}${trace.detail ? ` <em>${escapeHtml(trace.detail)}</em>` : ""}</span>`;
+    traceList.append(row);
+  }
+}
+
+async function createProject(): Promise<void> {
+  const name = prompt("Project name", "Untitled Project")?.trim();
+  if (!name) return;
+  try {
+    const created = await api.createProject(name);
+    await refreshProjects(created.manifest.id);
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  }
+}
+
+async function addObject(): Promise<void> {
+  if (!project) return;
+  const name = prompt("Object name", "CustomObject")?.trim();
+  if (!name) return;
+  try {
+    const updated = await api.addObject(project.manifest.id, name, selectedFolder);
+    project = updated;
+    definitions = compileDefinitions(updated.objects);
+    selectedFile = updated.manifest.objects.at(-1) ?? null;
+    if (selectedFile) selectedFolder = objectParentFolder(selectedFile);
+    dirty = false;
+    renderAll();
+    codeEditor.focus();
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  }
+}
+
+async function addObjectFolder(): Promise<void> {
+  if (!project) return;
+  const name = prompt(selectedFolder ? `New folder inside ${selectedFolder}` : "New object folder", "Components")?.trim();
+  if (!name) return;
+  try {
+    const updated = await api.addObjectFolder(project.manifest.id, name, selectedFolder);
+    project = updated;
+    definitions = compileDefinitions(updated.objects);
+    const created = updated.manifest.objectFolders
+      .filter((folder) => objectParentFolder(folder) === selectedFolder)
+      .sort((a, b) => a.localeCompare(b))
+      .at(-1);
+    if (created) selectedFolder = created;
+    renderAll();
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  }
+}
+
+async function moveSelectedObject(): Promise<void> {
+  if (!project || !selectedFile) return;
+  const choices = ["(root)", ...project.manifest.objectFolders];
+  const current = objectParentFolder(selectedFile);
+  const raw = prompt(`Move ${selectedFile.split("/").at(-1)} to folder:\n\n${choices.join("\n")}`, current || "(root)");
+  if (raw === null) return;
+  const folder = raw.trim() === "(root)" ? "" : raw.trim();
+  if (folder && !project.manifest.objectFolders.includes(folder)) {
+    alert("Choose an existing folder from the list.");
+    return;
+  }
+  try {
+    const previousFile = selectedFile;
+    const updated = await api.moveObject(project.manifest.id, previousFile, folder);
+    project = updated;
+    definitions = compileDefinitions(updated.objects);
+    const basename = previousFile.split("/").at(-1) ?? previousFile;
+    selectedFile = updated.manifest.objects.find((file) => file === (folder ? `${folder}/${basename}` : basename)) ?? null;
+    selectedFolder = folder;
+    dirty = false;
+    renderAll();
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  }
+}
+
+async function revealProject(): Promise<void> {
+  if (!project) return;
+  try {
+    await api.revealProject(project.manifest.id);
+    setGlobalStatus("Project folder revealed");
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  }
+}
+
+async function revealSelectedObject(): Promise<void> {
+  if (!project || !selectedFile) return;
+  try {
+    await api.revealObject(project.manifest.id, selectedFile);
+    setGlobalStatus("Object revealed in folder");
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  }
+}
+
+function eventCatalog(): Array<{ endpoint: EventEndpoint; definition: ObjectEventDefinition }> {
+  if (!project) return [];
+  const result: Array<{ endpoint: EventEndpoint; definition: ObjectEventDefinition }> = [];
+  for (const instance of project.manifest.instances) {
+    const definition = definitions.get(instance.objectFile);
+    for (const [name, event] of Object.entries(definition?.events ?? {})) {
+      result.push({ endpoint: { instanceId: instance.id, name }, definition: event });
+    }
+  }
+  return result;
+}
+
+function actionCatalog(): Array<{ endpoint: EventEndpoint; definition: ObjectActionDefinition }> {
+  if (!project) return [];
+  const result: Array<{ endpoint: EventEndpoint; definition: ObjectActionDefinition }> = [];
+  for (const instance of project.manifest.instances) {
+    const definition = definitions.get(instance.objectFile);
