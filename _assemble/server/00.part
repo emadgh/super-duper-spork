@@ -1,0 +1,339 @@
+import ts from "npm:typescript@5.9.2";
+
+type PortType = "number" | "string" | "boolean" | "any";
+
+interface BlackboardEntry {
+  type: PortType;
+  value: unknown;
+}
+
+interface ProjectInstance {
+  id: string;
+  objectFile: string;
+}
+
+interface EventEndpoint {
+  instanceId: string;
+  name: string;
+}
+
+type ValueBinding =
+  | { kind: "literal"; value: unknown }
+  | { kind: "blackboard"; key: string }
+  | { kind: "state"; instanceId: string; path: string }
+  | { kind: "event"; path: string }
+  | { kind: "output"; stepId: string; name: string };
+
+interface ActionStep {
+  id: string;
+  action: EventEndpoint;
+  inputs: Record<string, ValueBinding>;
+  outputs: Record<string, { blackboardKey?: string }>;
+}
+
+interface EventRule {
+  id: string;
+  event: EventEndpoint;
+  actions: ActionStep[];
+}
+
+interface ProjectManifest {
+  version: 3;
+  id: string;
+  name: string;
+  objects: string[];
+  objectFolders: string[];
+  instances: ProjectInstance[];
+  blackboard: Record<string, BlackboardEntry>;
+  rules: EventRule[];
+  updatedAt: string;
+}
+
+const ROOT = new URL("../", import.meta.url);
+const PROJECTS_DIR = new URL("workspace/projects/", ROOT);
+const DIST_MODE = Deno.args.includes("--dist");
+const PORT = 8000;
+
+async function main(): Promise<void> {
+  await ensureWorkspace();
+
+  Deno.serve({ port: PORT }, async (request) => {
+    try {
+      const url = new URL(request.url);
+
+      if (url.pathname.startsWith("/api/")) {
+        return await handleApi(request, url);
+      }
+
+      return await serveApp(url.pathname);
+    } catch (error) {
+      console.error(error);
+      return json({ error: errorMessage(error) }, 500);
+    }
+  });
+
+  console.log(`Super Duper Spork Studio: http://localhost:${PORT}`);
+}
+
+async function handleApi(request: Request, url: URL): Promise<Response> {
+  const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+
+  if (parts.length === 2 && parts[0] === "api" && parts[1] === "projects") {
+    if (request.method === "GET") {
+      return json(await listProjects());
+    }
+    if (request.method === "POST") {
+      const body = await readJson<{ name?: string }>(request);
+      const name = body.name?.trim();
+      if (!name) return json({ error: "Project name is required." }, 400);
+      const manifest = await createProject(name);
+      return json(await loadProject(manifest.id), 201);
+    }
+  }
+
+  if (parts.length >= 3 && parts[0] === "api" && parts[1] === "projects") {
+    const projectId = validateProjectId(parts[2]);
+
+    if (parts.length === 3) {
+      if (request.method === "GET") {
+        return json(await loadProject(projectId));
+      }
+      if (request.method === "PUT") {
+        const body = await readJson<{ manifest?: ProjectManifest }>(request);
+        if (!body.manifest) return json({ error: "Manifest is required." }, 400);
+        const current = await readManifest(projectId);
+        const next = sanitizeManifest(body.manifest, current);
+        await writeManifest(next);
+        return json(await loadProject(projectId));
+      }
+    }
+
+    if (parts.length === 4 && parts[3] === "objects" && request.method === "POST") {
+      const body = await readJson<{ name?: string; folder?: string }>(request);
+      const name = body.name?.trim();
+      if (!name) return json({ error: "Object name is required." }, 400);
+      await addObject(projectId, name, body.folder ?? "");
+      return json(await loadProject(projectId), 201);
+    }
+
+    if (parts.length === 4 && parts[3] === "folders" && request.method === "POST") {
+      const body = await readJson<{ name?: string; parent?: string }>(request);
+      const name = body.name?.trim();
+      if (!name) return json({ error: "Folder name is required." }, 400);
+      await addObjectFolder(projectId, name, body.parent ?? "");
+      return json(await loadProject(projectId), 201);
+    }
+
+    if (parts.length === 4 && parts[3] === "reveal" && request.method === "POST") {
+      const body = await readJson<{ objectFile?: string }>(request);
+      await revealInFileManager(projectId, body.objectFile);
+      return json({ ok: true });
+    }
+
+    if (parts.length === 6 && parts[3] === "objects" && parts[5] === "move" && request.method === "POST") {
+      const file = validateObjectPath(parts[4]);
+      const body = await readJson<{ folder?: string }>(request);
+      await moveObject(projectId, file, body.folder ?? "");
+      return json(await loadProject(projectId));
+    }
+
+    if (parts.length === 5 && parts[3] === "objects" && request.method === "PUT") {
+      const file = validateObjectPath(parts[4]);
+      const body = await readJson<{ source?: string }>(request);
+      if (typeof body.source !== "string") return json({ error: "Source is required." }, 400);
+
+      const manifest = await readManifest(projectId);
+      if (!manifest.objects.includes(file)) return json({ error: "Unknown object file." }, 404);
+
+      const result = transpileObject(body.source, file);
+      if (result.errors.length > 0) {
+        return json({ error: result.errors.join("\n") }, 400);
+      }
+
+      await Deno.writeTextFile(objectUrl(projectId, file), body.source);
+      manifest.updatedAt = new Date().toISOString();
+      await writeManifest(manifest);
+      return json(await loadProject(projectId));
+    }
+  }
+
+  return json({ error: "Not found." }, 404);
+}
+
+async function serveApp(pathname: string): Promise<Response> {
+  if (DIST_MODE) {
+    if (pathname === "/") return fileResponse(new URL("dist/index.html", ROOT), "text/html; charset=utf-8");
+    if (pathname === "/styles.css") return fileResponse(new URL("dist/styles.css", ROOT), "text/css; charset=utf-8");
+    if (pathname.startsWith("/client/") && pathname.endsWith(".js")) {
+      const relative = pathname.replace(/^\//, "");
+      return fileResponse(new URL(`dist/${relative}`, ROOT), "text/javascript; charset=utf-8");
+    }
+    return new Response("Not found", { status: 404 });
+  }
+
+  if (pathname === "/") return fileResponse(new URL("src/client/index.html", ROOT), "text/html; charset=utf-8");
+  if (pathname === "/styles.css") return fileResponse(new URL("src/client/styles.css", ROOT), "text/css; charset=utf-8");
+
+  if (pathname.startsWith("/client/") && pathname.endsWith(".js")) {
+    const relative = pathname.slice("/client/".length).replace(/\.js$/, ".ts");
+    if (!/^[a-zA-Z0-9_./-]+\.ts$/.test(relative) || relative.includes("..")) {
+      return new Response("Invalid path", { status: 400 });
+    }
+    const sourceUrl = new URL(`src/client/${relative}`, ROOT);
+    try {
+      const source = await Deno.readTextFile(sourceUrl);
+      const result = ts.transpileModule(source, {
+        fileName: relative,
+        compilerOptions: {
+          target: ts.ScriptTarget.ES2022,
+          module: ts.ModuleKind.ES2022,
+          strict: true,
+          rewriteRelativeImportExtensions: true,
+          sourceMap: true,
+        },
+      });
+      return new Response(result.outputText, {
+        headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" },
+      });
+    } catch (error) {
+      if (error instanceof Deno.errors.NotFound) return new Response("Not found", { status: 404 });
+      throw error;
+    }
+  }
+
+  return new Response("Not found", { status: 404 });
+}
+
+async function ensureWorkspace(): Promise<void> {
+  await Deno.mkdir(PROJECTS_DIR, { recursive: true });
+  await ensureCounterDemo();
+  await ensureCalculatorDemo();
+  await ensureRealCalculatorDemo();
+}
+
+async function ensureCounterDemo(): Promise<void> {
+  const projectId = "counter-demo";
+  if (await projectExists(projectId)) return;
+
+  const projectDir = projectUrl(projectId);
+  await Deno.mkdir(new URL("objects/", projectDir), { recursive: true });
+  await Deno.writeTextFile(objectUrl(projectId, "Button.ts"), DEFAULT_BUTTON_SOURCE);
+  await Deno.writeTextFile(objectUrl(projectId, "Counter.ts"), DEFAULT_COUNTER_SOURCE);
+
+  const incrementStepId = "increment-counter";
+  const manifest: ProjectManifest = {
+    version: 3,
+    id: projectId,
+    name: "Counter Demo",
+    objects: ["Button.ts", "Counter.ts"],
+    objectFolders: [],
+    instances: [
+      { id: "button1", objectFile: "Button.ts" },
+      { id: "counter1", objectFile: "Counter.ts" },
+    ],
+    blackboard: {
+      count: { type: "number", value: 0 },
+    },
+    rules: [
+      {
+        id: "button-click-rule",
+        event: { instanceId: "button1", name: "click" },
+        actions: [
+          {
+            id: incrementStepId,
+            action: { instanceId: "counter1", name: "increment" },
+            inputs: { amount: { kind: "literal", value: 1 } },
+            outputs: { value: { blackboardKey: "count" } },
+          },
+        ],
+      },
+    ],
+    updatedAt: new Date().toISOString(),
+  };
+  await writeManifest(manifest);
+}
+
+async function ensureCalculatorDemo(): Promise<void> {
+  const projectId = "calculator-demo";
+  if (await projectExists(projectId)) return;
+
+  const projectDir = projectUrl(projectId);
+  await Deno.mkdir(new URL("objects/", projectDir), { recursive: true });
+  await Deno.writeTextFile(objectUrl(projectId, "CalculatorForm.ts"), CALCULATOR_FORM_SOURCE);
+  await Deno.writeTextFile(objectUrl(projectId, "Calculator.ts"), CALCULATOR_LOGIC_SOURCE);
+  await Deno.writeTextFile(objectUrl(projectId, "ResultDisplay.ts"), RESULT_DISPLAY_SOURCE);
+
+  const calculateStepId = "calculate-step";
+  const manifest: ProjectManifest = {
+    version: 3,
+    id: projectId,
+    name: "Calculator",
+    objects: ["CalculatorForm.ts", "Calculator.ts", "ResultDisplay.ts"],
+    objectFolders: [],
+    instances: [
+      { id: "form1", objectFile: "CalculatorForm.ts" },
+      { id: "calculator1", objectFile: "Calculator.ts" },
+      { id: "result1", objectFile: "ResultDisplay.ts" },
+    ],
+    blackboard: {
+      lastResult: { type: "number", value: 0 },
+      lastExpression: { type: "string", value: "" },
+    },
+    rules: [
+      {
+        id: "calculate-rule",
+        event: { instanceId: "form1", name: "calculate" },
+        actions: [
+          {
+            id: calculateStepId,
+            action: { instanceId: "calculator1", name: "calculate" },
+            inputs: {
+              left: { kind: "event", path: "left" },
+              right: { kind: "event", path: "right" },
+              operator: { kind: "event", path: "operator" },
+            },
+            outputs: {
+              result: { blackboardKey: "lastResult" },
+              expression: { blackboardKey: "lastExpression" },
+            },
+          },
+          {
+            id: "show-result-step",
+            action: { instanceId: "result1", name: "setValue" },
+            inputs: {
+              value: { kind: "output", stepId: calculateStepId, name: "result" },
+            },
+            outputs: {},
+          },
+        ],
+      },
+    ],
+    updatedAt: new Date().toISOString(),
+  };
+  await writeManifest(manifest);
+}
+
+async function ensureRealCalculatorDemo(): Promise<void> {
+  const projectId = "calculator-real-demo";
+  if (await projectExists(projectId)) return;
+
+  const projectDir = projectUrl(projectId);
+  await Deno.mkdir(new URL("objects/UI/", projectDir), { recursive: true });
+  await Deno.mkdir(new URL("objects/Logic/", projectDir), { recursive: true });
+  await Deno.writeTextFile(objectUrl(projectId, "UI/CalculatorShell.ts"), REAL_CALCULATOR_SHELL_SOURCE);
+  await Deno.writeTextFile(objectUrl(projectId, "Logic/CalculatorEngine.ts"), REAL_CALCULATOR_ENGINE_SOURCE);
+
+  const engineStepId = "calculator-engine-press";
+  const manifest: ProjectManifest = {
+    version: 3,
+    id: projectId,
+    name: "Calculator · Real Demo",
+    objects: ["UI/CalculatorShell.ts", "Logic/CalculatorEngine.ts"],
+    objectFolders: ["UI", "Logic"],
+    instances: [
+      { id: "calculatorUI", objectFile: "UI/CalculatorShell.ts" },
+      { id: "calculatorEngine", objectFile: "Logic/CalculatorEngine.ts" },
+    ],
+    blackboard: {
+      display: { type: "string", value: "0" },
+      expression: { type: "string", value: "" },
