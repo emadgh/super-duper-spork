@@ -529,12 +529,12 @@ function transpileObject(source: string, file: string): { output: string; errors
 
 async function readManifest(projectId: string): Promise<ProjectManifest> {
   const source = await Deno.readTextFile(new URL("project.json", projectUrl(validateProjectId(projectId))));
-  const manifest = JSON.parse(source) as Partial<ProjectManifest> & { version?: number; objectFolders?: unknown };
+  const manifest = JSON.parse(source) as Omit<Partial<ProjectManifest>, "version" | "objectFolders"> & { version?: number; objectFolders?: unknown };
   if (manifest.id !== projectId || (manifest.version !== 2 && manifest.version !== 3)) throw new Error("Invalid project manifest.");
   return sanitizeLoadedManifest(manifest);
 }
 
-function sanitizeLoadedManifest(manifest: Partial<ProjectManifest> & { id?: string; version?: number; objectFolders?: unknown }): ProjectManifest {
+function sanitizeLoadedManifest(manifest: Omit<Partial<ProjectManifest>, "version" | "objectFolders"> & { id?: string; version?: number; objectFolders?: unknown }): ProjectManifest {
   const id = validateProjectId(String(manifest.id ?? ""));
   const objects = Array.isArray(manifest.objects) ? manifest.objects.map(validateObjectPath) : [];
   const explicitFolders = Array.isArray(manifest.objectFolders)

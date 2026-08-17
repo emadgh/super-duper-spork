@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import { EventRuntime } from "../src/client/runtime.ts";
 import type { ObjectDefinition } from "../src/client/model.ts";
 
