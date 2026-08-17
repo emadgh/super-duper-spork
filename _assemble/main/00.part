@@ -1,0 +1,301 @@
+import { api } from "./api.ts";
+import { CodeEditor } from "./code-editor.ts";
+import { evaluateObjectFile } from "./compiler.ts";
+import type {
+  ActionStep,
+  BlackboardEntry,
+  EventEndpoint,
+  EventRule,
+  LoadedProject,
+  ObjectActionDefinition,
+  ObjectDefinition,
+  ObjectEventDefinition,
+  PortDefinition,
+  PortType,
+  ProjectObjectFile,
+  ProjectSummary,
+  ValueBinding,
+} from "./model.ts";
+import { EventRuntime, type RuntimeTrace } from "./runtime.ts";
+
+const projectSelect = required<HTMLSelectElement>("#project-select");
+const newProjectButton = required<HTMLButtonElement>("#new-project");
+const revealProjectButton = required<HTMLButtonElement>("#reveal-project");
+const openProjectManagerButton = required<HTMLButtonElement>("#open-project-manager");
+const projectManagerDialog = required<HTMLDialogElement>("#project-manager");
+const closeProjectManagerButton = required<HTMLButtonElement>("#close-project-manager");
+const dialogNewProjectButton = required<HTMLButtonElement>("#dialog-new-project");
+const projectGrid = required<HTMLElement>("#project-grid");
+const objectList = required<HTMLElement>("#object-list");
+const objectFilter = required<HTMLInputElement>("#object-filter");
+const addObjectButton = required<HTMLButtonElement>("#add-object");
+const addFolderButton = required<HTMLButtonElement>("#add-folder");
+const blackboardList = required<HTMLElement>("#blackboard-list");
+const addBlackboardButton = required<HTMLButtonElement>("#add-blackboard");
+const editorHost = required<HTMLElement>("#editor-host");
+const filenameLabel = required<HTMLElement>("#filename");
+const editorStatus = required<HTMLElement>("#editor-status");
+const dirtyDot = required<HTMLElement>("#dirty-dot");
+const saveButton = required<HTMLButtonElement>("#save-object");
+const revealObjectButton = required<HTMLButtonElement>("#reveal-object");
+const moveObjectButton = required<HTMLButtonElement>("#move-object");
+const eventsSelect = required<HTMLSelectElement>("#event-select");
+const actionsSelect = required<HTMLSelectElement>("#action-select");
+const connectButton = required<HTMLButtonElement>("#connect");
+const ruleList = required<HTMLElement>("#rule-list");
+const ruleCreate = required<HTMLElement>("#rule-create");
+const diagramTools = required<HTMLElement>("#diagram-tools");
+const diagramHost = required<HTMLElement>("#diagram");
+const diagramRefreshButton = required<HTMLButtonElement>("#diagram-refresh");
+const eventEditorView = required<HTMLElement>("#event-editor-view");
+const diagramEditorView = required<HTMLElement>("#diagram-editor-view");
+const previewHost = required<HTMLElement>("#preview");
+const previewPanel = required<HTMLElement>(".preview-panel");
+const runButton = required<HTMLButtonElement>("#run");
+const resetButton = required<HTMLButtonElement>("#reset");
+const apiSummary = required<HTMLElement>("#api-summary");
+const globalStatus = required<HTMLElement>("#global-status");
+const projectMeta = required<HTMLElement>("#project-meta");
+const traceList = required<HTMLElement>("#trace-list");
+const clearTraceButton = required<HTMLButtonElement>("#clear-trace");
+const appShell = required<HTMLElement>("#app-shell");
+
+const codeEditor = new CodeEditor();
+editorHost.append(codeEditor.element);
+
+let project: LoadedProject | null = null;
+let selectedFile: string | null = null;
+let dirty = false;
+let runtime: EventRuntime | null = null;
+let definitions = new Map<string, ObjectDefinition>();
+let projectSummaries: ProjectSummary[] = [];
+let traceRows: RuntimeTrace[] = [];
+let liveBlackboard: Record<string, BlackboardEntry> | null = null;
+let selectedFolder = "";
+let logicView: "events" | "diagram" = "events";
+const collapsedFolders = new Set<string>();
+
+codeEditor.onChange(() => {
+  dirty = true;
+  renderEditorStatus();
+});
+codeEditor.onSave(() => void saveSelectedObject());
+
+saveButton.addEventListener("click", () => void saveSelectedObject());
+runButton.addEventListener("click", () => void runProject());
+resetButton.addEventListener("click", () => void runProject());
+connectButton.addEventListener("click", () => void addRuleFromToolbar());
+projectSelect.addEventListener("change", () => void switchProject(projectSelect.value));
+newProjectButton.addEventListener("click", () => void createProject());
+revealProjectButton.addEventListener("click", () => void revealProject());
+openProjectManagerButton.addEventListener("click", () => {
+  renderProjectManager();
+  projectManagerDialog.showModal();
+});
+closeProjectManagerButton.addEventListener("click", () => projectManagerDialog.close());
+dialogNewProjectButton.addEventListener("click", () => {
+  projectManagerDialog.close();
+  void createProject();
+});
+projectManagerDialog.addEventListener("click", (event) => {
+  if (event.target === projectManagerDialog) projectManagerDialog.close();
+});
+addObjectButton.addEventListener("click", () => void addObject());
+addFolderButton.addEventListener("click", () => void addObjectFolder());
+revealObjectButton.addEventListener("click", () => void revealSelectedObject());
+moveObjectButton.addEventListener("click", () => void moveSelectedObject());
+diagramRefreshButton.addEventListener("click", renderDiagram);
+addBlackboardButton.addEventListener("click", () => void addBlackboardVariable());
+objectFilter.addEventListener("input", renderObjectList);
+clearTraceButton.addEventListener("click", () => {
+  traceRows = [];
+  liveBlackboard = null;
+  renderTrace();
+  renderBlackboard();
+});
+
+setupNavigatorViews();
+setupLogicViews();
+setupSplitters();
+await refreshProjects();
+
+async function refreshProjects(preferredId?: string): Promise<void> {
+  setGlobalStatus("Loading projects…");
+  projectSummaries = await api.listProjects();
+  projectSelect.replaceChildren();
+
+  for (const item of projectSummaries) {
+    const option = document.createElement("option");
+    option.value = item.id;
+    option.textContent = item.name;
+    projectSelect.append(option);
+  }
+
+  const id = preferredId ?? project?.manifest.id ?? projectSummaries[0]?.id;
+  if (id) {
+    projectSelect.value = id;
+    await switchProject(id);
+  } else {
+    clearWorkspace();
+  }
+  renderProjectManager();
+  setGlobalStatus("Ready");
+}
+
+function renderProjectManager(): void {
+  projectGrid.replaceChildren();
+  if (!projectSummaries.length) {
+    projectGrid.append(emptyMessage("No projects yet. Create the first project."));
+    return;
+  }
+
+  for (const item of projectSummaries) {
+    const card = document.createElement("article");
+    card.className = `project-card${project?.manifest.id === item.id ? " is-current" : ""}`;
+    const initial = item.name.trim().slice(0, 1).toUpperCase() || "P";
+    card.innerHTML = `
+      <span class="project-card-icon">${escapeHtml(initial)}</span>
+      <span class="project-card-copy">
+        <strong>${escapeHtml(item.name)}</strong>
+        <small>${escapeHtml(item.id)}</small>
+        <em>${escapeHtml(formatProjectDate(item.updatedAt))}</em>
+      </span>
+      <span class="project-card-actions"></span>
+    `;
+    const actions = card.querySelector<HTMLElement>(".project-card-actions");
+    if (!actions) continue;
+    const reveal = document.createElement("button");
+    reveal.className = "project-card-reveal";
+    reveal.textContent = "Reveal";
+    reveal.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      try {
+        await api.revealProject(item.id);
+        setGlobalStatus("Project folder revealed");
+      } catch (error) {
+        setGlobalStatus(errorMessage(error), true);
+      }
+    });
+    const open = document.createElement("button");
+    open.className = "project-card-open";
+    open.textContent = project?.manifest.id === item.id ? "Current" : "Open →";
+    open.addEventListener("click", () => {
+      projectManagerDialog.close();
+      projectSelect.value = item.id;
+      void switchProject(item.id);
+    });
+    actions.append(reveal, open);
+    card.addEventListener("dblclick", () => {
+      projectManagerDialog.close();
+      projectSelect.value = item.id;
+      void switchProject(item.id);
+    });
+    projectGrid.append(card);
+  }
+}
+
+function formatProjectDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown date";
+  return `Updated ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+async function switchProject(projectId: string): Promise<void> {
+  if (dirty && !confirm("Discard unsaved object changes?")) {
+    if (project) projectSelect.value = project.manifest.id;
+    return;
+  }
+
+  runtime?.dispose();
+  runtime = null;
+  previewPanel.classList.remove("is-running");
+  previewHost.replaceChildren(emptyMessage("Press Run to start the project."));
+  traceRows = [];
+  renderTrace();
+
+  setGlobalStatus("Opening project…");
+  project = await api.loadProject(projectId);
+  definitions = compileDefinitions(project.objects);
+  selectedFile = project.manifest.objects[0] ?? null;
+  selectedFolder = "";
+  dirty = false;
+
+  renderAll();
+  setGlobalStatus("Ready");
+}
+
+function renderAll(): void {
+  renderObjectList();
+  renderSelectedObject();
+  renderBlackboard();
+  renderEventOptions();
+  renderRules();
+  renderDiagram();
+  renderProjectMeta();
+}
+
+function compileDefinitions(objects: ProjectObjectFile[]): Map<string, ObjectDefinition> {
+  const result = new Map<string, ObjectDefinition>();
+  for (const file of objects) {
+    try {
+      result.set(file.file, evaluateObjectFile(file));
+    } catch (error) {
+      console.error(error);
+      setGlobalStatus(`Could not load ${file.file}`, true);
+    }
+  }
+  return result;
+}
+
+function renderObjectList(): void {
+  objectList.replaceChildren();
+  if (!project) return;
+  const query = objectFilter.value.trim().toLowerCase();
+
+  if (query) {
+    const matches = project.manifest.objects.filter((file) => {
+      const definition = definitions.get(file);
+      const name = definition?.name ?? basenameWithoutExtension(file);
+      return `${name} ${file}`.toLowerCase().includes(query);
+    });
+    for (const file of matches) objectList.append(renderObjectTreeFile(file, 0, true));
+    if (!matches.length) objectList.append(emptyMessage("No objects match this filter."));
+    return;
+  }
+
+  const rootRow = document.createElement("button");
+  rootRow.className = `folder-item root-folder${selectedFolder === "" ? " is-selected" : ""}`;
+  rootRow.style.setProperty("--tree-depth", "0");
+  rootRow.innerHTML = `<span class="tree-chevron"></span><span class="folder-glyph">⌂</span><span class="folder-name">Project Objects</span><small>${project.manifest.objects.filter((file) => !objectParentFolder(file)).length}</small>`;
+  rootRow.addEventListener("click", () => {
+    selectedFolder = "";
+    renderObjectList();
+  });
+  objectList.append(rootRow);
+
+  const folders = new Set(project.manifest.objectFolders);
+  for (const file of project.manifest.objects) {
+    const parent = objectParentFolder(file);
+    if (parent) folders.add(parent);
+  }
+
+  renderFolderLevel("", 0, [...folders]);
+  const rootFiles = project.manifest.objects.filter((file) => !objectParentFolder(file));
+  for (const file of rootFiles) objectList.append(renderObjectTreeFile(file, 0));
+
+  if (!objectList.children.length) objectList.append(emptyMessage("No objects yet. Create a folder or an object."));
+}
+
+function renderFolderLevel(parent: string, depth: number, folders: string[]): void {
+  if (!project) return;
+  const children = folders
+    .filter((folder) => objectParentFolder(folder) === parent)
+    .sort((a, b) => a.localeCompare(b));
+
+  for (const folder of children) {
+    const row = document.createElement("button");
+    row.className = `folder-item${selectedFolder === folder ? " is-selected" : ""}`;
+    row.style.setProperty("--tree-depth", String(depth));
+    const collapsed = collapsedFolders.has(folder);
+    row.innerHTML = `
+      <span class="tree-chevron">${collapsed ? "›" : "⌄"}</span>
