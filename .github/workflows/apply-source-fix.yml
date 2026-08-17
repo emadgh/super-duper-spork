@@ -1,0 +1,47 @@
+name: Apply source-only Deno fixes
+
+on:
+  push:
+    branches:
+      - feature/studio-v0.3
+    paths:
+      - ".github/workflows/apply-source-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/studio-v0.3
+      - name: Patch source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          server = Path("src/server.ts")
+          text = server.read_text()
+          text = text.replace(
+              'const manifest = JSON.parse(source) as Partial<ProjectManifest> & { version?: number; objectFolders?: unknown };',
+              'const manifest = JSON.parse(source) as Omit<Partial<ProjectManifest>, "version" | "objectFolders"> & { version?: number; objectFolders?: unknown };'
+          )
+          text = text.replace(
+              'function sanitizeLoadedManifest(manifest: Partial<ProjectManifest> & { id?: string; version?: number; objectFolders?: unknown }): ProjectManifest {',
+              'function sanitizeLoadedManifest(manifest: Omit<Partial<ProjectManifest>, "version" | "objectFolders"> & { id?: string; version?: number; objectFolders?: unknown }): ProjectManifest {'
+          )
+          server.write_text(text)
+          test = Path("tests/runtime.test.ts")
+          content = test.read_text()
+          directive = '/// <reference lib="dom" />\n'
+          if not content.startswith(directive):
+              test.write_text(directive + content)
+          PY
+      - name: Commit source fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server.ts tests/runtime.test.ts
+          git commit -m "fix: satisfy native Deno type checking"
+          git push origin HEAD:feature/studio-v0.3
