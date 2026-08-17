@@ -1,0 +1,36 @@
+name: Assemble staged source
+
+on:
+  push:
+    branches:
+      - feature/studio-v0.3
+    paths:
+      - "_assemble/**"
+      - ".github/workflows/assemble-source.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/studio-v0.3
+      - name: Assemble source
+        run: |
+          mkdir -p src/client src
+          cat _assemble/styles/*.part > src/client/styles.css
+          cat _assemble/main/*.part > src/client/main.ts
+          cat _assemble/server/*.part > src/server.ts
+          rm -rf _assemble
+          rm -f .github/workflows/assemble-source.yml
+      - name: Commit assembled source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: assemble studio v0.3 source"
+          git push origin HEAD:feature/studio-v0.3
