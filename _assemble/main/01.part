@@ -1,0 +1,319 @@
+      <span class="folder-glyph">▱</span>
+      <span class="folder-name">${escapeHtml(folder.split("/").at(-1) ?? folder)}</span>
+      <small>${project.manifest.objects.filter((file) => objectParentFolder(file) === folder).length}</small>
+    `;
+    row.addEventListener("click", (event) => {
+      selectedFolder = folder;
+      if ((event.target as HTMLElement).classList.contains("tree-chevron")) {
+        if (collapsedFolders.has(folder)) collapsedFolders.delete(folder);
+        else collapsedFolders.add(folder);
+      }
+      renderObjectList();
+    });
+    objectList.append(row);
+
+    if (collapsed) continue;
+    const files = project.manifest.objects
+      .filter((file) => objectParentFolder(file) === folder)
+      .sort((a, b) => a.localeCompare(b));
+    for (const file of files) objectList.append(renderObjectTreeFile(file, depth + 1));
+    renderFolderLevel(folder, depth + 1, folders);
+  }
+}
+
+function renderObjectTreeFile(file: string, depth: number, showPath = false): HTMLElement {
+  const definition = definitions.get(file);
+  const name = definition?.name ?? basenameWithoutExtension(file);
+  const button = document.createElement("button");
+  button.className = `object-item${selectedFile === file ? " is-active" : ""}`;
+  button.style.setProperty("--tree-depth", String(depth));
+  button.innerHTML = `
+    <span class="object-icon">${escapeHtml(name.slice(0, 2).toUpperCase())}</span>
+    <span class="object-copy"><strong>${escapeHtml(name)}</strong><small>${escapeHtml(showPath ? file : file.split("/").at(-1) ?? file)}</small></span>
+  `;
+  button.addEventListener("click", () => {
+    if (dirty && !confirm("Discard unsaved changes?")) return;
+    selectedFile = file;
+    selectedFolder = objectParentFolder(file);
+    dirty = false;
+    renderObjectList();
+    renderSelectedObject();
+  });
+  return button;
+}
+
+function renderSelectedObject(): void {
+  if (!project || !selectedFile) {
+    filenameLabel.textContent = "No object selected";
+    codeEditor.setValue("");
+    codeEditor.setReadOnly(true);
+    apiSummary.replaceChildren(emptyInline("Create an object to begin."));
+    revealObjectButton.disabled = true;
+    moveObjectButton.disabled = true;
+    return;
+  }
+
+  const object = project.objects.find((item) => item.file === selectedFile);
+  if (!object) return;
+
+  filenameLabel.textContent = object.file;
+  revealObjectButton.disabled = false;
+  moveObjectButton.disabled = false;
+  codeEditor.setReadOnly(false);
+  codeEditor.setValue(object.source);
+  dirty = false;
+  renderEditorStatus();
+  renderApiSummary();
+}
+
+function renderEditorStatus(message?: string, isError = false): void {
+  editorStatus.textContent = message ?? (dirty ? "Unsaved" : "Saved");
+  editorStatus.classList.toggle("is-error", isError);
+  dirtyDot.classList.toggle("is-visible", dirty);
+}
+
+function renderApiSummary(): void {
+  apiSummary.replaceChildren();
+  if (!selectedFile) return;
+  const definition = definitions.get(selectedFile);
+  if (!definition) {
+    apiSummary.append(emptyInline("Object definition could not be evaluated."));
+    return;
+  }
+
+  apiSummary.append(apiGroup("Object", [definition.name]));
+  apiSummary.append(apiGroup("Events", Object.keys(definition.events ?? {}), "event"));
+  apiSummary.append(apiGroup("Actions", Object.keys(definition.actions ?? {}), "action"));
+}
+
+async function saveSelectedObject(): Promise<void> {
+  if (!project || !selectedFile) return;
+  renderEditorStatus("Checking…");
+  saveButton.disabled = true;
+
+  try {
+    const next = await api.saveObject(project.manifest.id, selectedFile, codeEditor.getValue());
+    project = next;
+    definitions = compileDefinitions(next.objects);
+    dirty = false;
+    renderEditorStatus("Saved");
+    renderObjectList();
+    renderApiSummary();
+    renderEventOptions();
+    renderRules();
+    renderDiagram();
+    renderProjectMeta();
+  } catch (error) {
+    renderEditorStatus(errorMessage(error), true);
+    setGlobalStatus("Object has TypeScript errors", true);
+  } finally {
+    saveButton.disabled = false;
+  }
+}
+
+function renderEventOptions(): void {
+  fillEndpointSelect(eventsSelect, eventCatalog().map((item) => ({
+    value: endpointValue(item.endpoint),
+    label: `${item.endpoint.instanceId} · ${item.definition.label ?? item.endpoint.name}`,
+  })), "No events available");
+
+  fillEndpointSelect(actionsSelect, actionCatalog().map((item) => ({
+    value: endpointValue(item.endpoint),
+    label: `${item.endpoint.instanceId} · ${item.definition.label ?? item.endpoint.name}`,
+  })), "No actions available");
+
+  connectButton.disabled = !eventsSelect.value || !actionsSelect.value;
+}
+
+async function addRuleFromToolbar(): Promise<void> {
+  if (!project || !eventsSelect.value || !actionsSelect.value) return;
+  const event = parseEndpointValue(eventsSelect.value);
+  const action = parseEndpointValue(actionsSelect.value);
+  const step = createActionStep(action);
+  project.manifest.rules.push({ id: crypto.randomUUID(), event, actions: [step] });
+  await persistManifest();
+  renderRules();
+  renderDiagram();
+}
+
+function renderRules(): void {
+  ruleList.replaceChildren();
+  if (!project) return;
+
+  if (!project.manifest.rules.length) {
+    ruleList.append(emptyMessage("No event rules yet. Choose an event and an action above, then add the first rule."));
+    return;
+  }
+
+  project.manifest.rules.forEach((rule, index) => ruleList.append(renderRuleCard(rule, index)));
+}
+
+function renderRuleCard(rule: EventRule, index: number): HTMLElement {
+  const card = document.createElement("article");
+  card.className = "rule-card";
+
+  const head = document.createElement("div");
+  head.className = "rule-event-row";
+  head.innerHTML = `
+    <span class="rule-index">${index + 1}</span>
+    <span class="endpoint-chip">EVENT&nbsp; ${escapeHtml(rule.event.instanceId)}.${escapeHtml(rule.event.name)}</span>
+    <span class="rule-spacer"></span>
+  `;
+  const deleteRule = document.createElement("button");
+  deleteRule.className = "text-button danger";
+  deleteRule.textContent = "Delete rule";
+  deleteRule.addEventListener("click", () => void removeRule(rule.id));
+  head.append(deleteRule);
+
+  const actionsHost = document.createElement("div");
+  actionsHost.className = "rule-actions";
+
+  rule.actions.forEach((step, stepIndex) => actionsHost.append(renderActionStep(rule, step, stepIndex)));
+
+  const addRow = document.createElement("div");
+  addRow.className = "rule-add-action";
+  const select = document.createElement("select");
+  fillEndpointSelect(select, actionCatalog().map((item) => ({
+    value: endpointValue(item.endpoint),
+    label: `${item.endpoint.instanceId} · ${item.definition.label ?? item.endpoint.name}`,
+  })), "No actions available");
+  const add = document.createElement("button");
+  add.className = "mini-button";
+  add.textContent = "+ Add action";
+  add.disabled = !select.value;
+  add.addEventListener("click", () => {
+    if (!select.value) return;
+    rule.actions.push(createActionStep(parseEndpointValue(select.value)));
+    void persistManifest().then(renderRules);
+  });
+  addRow.append(select, add);
+  actionsHost.append(addRow);
+
+  card.append(head, actionsHost);
+  return card;
+}
+
+function renderActionStep(rule: EventRule, step: ActionStep, stepIndex: number): HTMLElement {
+  const container = document.createElement("section");
+  container.className = "action-step";
+  const action = getActionDefinition(step.action);
+
+  const head = document.createElement("div");
+  head.className = "action-head";
+  head.innerHTML = `
+    <span class="step-number">${String(stepIndex + 1).padStart(2, "0")}</span>
+    <span class="endpoint-chip action-endpoint">ACTION&nbsp; ${escapeHtml(step.action.instanceId)}.${escapeHtml(step.action.name)}</span>
+    <span class="rule-spacer"></span>
+  `;
+  const remove = document.createElement("button");
+  remove.className = "text-button danger";
+  remove.textContent = "Remove";
+  remove.addEventListener("click", () => {
+    rule.actions = rule.actions.filter((item) => item.id !== step.id);
+    void persistManifest().then(renderRules);
+  });
+  head.append(remove);
+
+  const ports = document.createElement("div");
+  ports.className = "action-ports";
+  const inputs = document.createElement("div");
+  inputs.className = "port-column";
+  inputs.innerHTML = `<div class="port-column-title">Inputs</div>`;
+  const outputs = document.createElement("div");
+  outputs.className = "port-column";
+  outputs.innerHTML = `<div class="port-column-title">Outputs</div>`;
+
+  const inputEntries = Object.entries(action?.inputs ?? {});
+  if (!inputEntries.length) inputs.append(emptyInline("No input ports"));
+  for (const [name, port] of inputEntries) inputs.append(renderInputPort(rule, step, name, port));
+
+  const outputEntries = Object.entries(action?.outputs ?? {});
+  if (!outputEntries.length) outputs.append(emptyInline("No output ports"));
+  for (const [name, port] of outputEntries) outputs.append(renderOutputPort(step, name, port));
+
+  ports.append(inputs, outputs);
+  container.append(head, ports);
+  return container;
+}
+
+function renderInputPort(rule: EventRule, step: ActionStep, name: string, port: PortDefinition): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "port-row";
+  row.innerHTML = `<div class="port-name"><span class="port-dot ${port.type}"></span>${escapeHtml(port.label ?? name)}</div>`;
+
+  const editor = document.createElement("div");
+  editor.className = "binding-editor";
+  const kind = document.createElement("select");
+  const kinds: Array<{ value: ValueBinding["kind"]; label: string }> = [
+    { value: "literal", label: "Value" },
+    { value: "blackboard", label: "Blackboard" },
+    { value: "state", label: "Object state" },
+    { value: "event", label: "Event output" },
+    { value: "output", label: "Action output" },
+  ];
+  for (const item of kinds) kind.append(option(item.value, item.label));
+
+  let binding = step.inputs[name] ?? defaultBinding(port);
+  step.inputs[name] = binding;
+  kind.value = binding.kind;
+
+  const valueHost = document.createElement("span");
+  valueHost.style.minWidth = "0";
+  renderBindingValueEditor(valueHost, rule, step, port, binding, (next) => {
+    step.inputs[name] = next;
+    void persistManifest();
+  });
+
+  kind.addEventListener("change", () => {
+    binding = bindingForKind(kind.value as ValueBinding["kind"], port, rule, step);
+    step.inputs[name] = binding;
+    renderBindingValueEditor(valueHost, rule, step, port, binding, (next) => {
+      step.inputs[name] = next;
+      void persistManifest();
+    });
+    void persistManifest();
+  });
+
+  editor.append(kind, valueHost);
+  row.append(editor);
+  return row;
+}
+
+function renderBindingValueEditor(
+  host: HTMLElement,
+  rule: EventRule,
+  step: ActionStep,
+  port: PortDefinition,
+  binding: ValueBinding,
+  onChange: (binding: ValueBinding) => void,
+): void {
+  host.replaceChildren();
+
+  if (binding.kind === "literal") {
+    const input = inputForPort(port, binding.value);
+    input.addEventListener("change", () => onChange({ kind: "literal", value: readPortInput(input, port.type) }));
+    host.append(input);
+    return;
+  }
+
+  const select = document.createElement("select");
+
+  if (binding.kind === "blackboard") {
+    const keys = matchingBlackboardKeys(port.type);
+    for (const key of keys) select.append(option(key, key));
+    select.value = binding.key;
+    select.addEventListener("change", () => onChange({ kind: "blackboard", key: select.value }));
+  }
+
+  if (binding.kind === "state") {
+    const values = stateBindingOptions(port.type);
+    for (const value of values) select.append(option(`${value.instanceId}|${value.path}`, `${value.instanceId}.${value.path}`));
+    select.value = `${binding.instanceId}|${binding.path}`;
+    select.addEventListener("change", () => {
+      const [instanceId, path] = select.value.split("|");
+      onChange({ kind: "state", instanceId, path });
+    });
+  }
+
+  if (binding.kind === "event") {
+    const event = getEventDefinition(rule.event);
