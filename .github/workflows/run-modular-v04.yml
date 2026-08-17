@@ -24,11 +24,12 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import textwrap
           source = Path('.github/workflows/apply-modular-v04.yml').read_text().splitlines()
           start = next(i for i, line in enumerate(source) if "python3 - <<'PY'" in line) + 1
           end = next(i for i in range(start, len(source)) if source[i].strip() == 'PY')
-          Path('/tmp/apply-modular.py').write_text(textwrap.dedent('\n'.join(source[start:end])) + '\n')
+          block = source[start:end]
+          normalized = '\n'.join(line[10:] if line.startswith('          ') else line for line in block)
+          Path('/tmp/apply-modular.py').write_text(normalized + '\n')
           PY
       - name: Apply refactor
         run: python3 /tmp/apply-modular.py
