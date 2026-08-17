@@ -1,0 +1,295 @@
+      memory: { type: "number", value: 0 },
+    },
+    rules: [
+      {
+        id: "calculator-key-rule",
+        event: { instanceId: "calculatorUI", name: "keyPressed" },
+        actions: [
+          {
+            id: engineStepId,
+            action: { instanceId: "calculatorEngine", name: "pressKey" },
+            inputs: {
+              key: { kind: "event", path: "key" },
+            },
+            outputs: {
+              display: { blackboardKey: "display" },
+              expression: { blackboardKey: "expression" },
+              memoryValue: { blackboardKey: "memory" },
+              memoryLabel: {},
+            },
+          },
+          {
+            id: "calculator-render-view",
+            action: { instanceId: "calculatorUI", name: "setView" },
+            inputs: {
+              display: { kind: "output", stepId: engineStepId, name: "display" },
+              expression: { kind: "output", stepId: engineStepId, name: "expression" },
+              memory: { kind: "output", stepId: engineStepId, name: "memoryLabel" },
+            },
+            outputs: {},
+          },
+        ],
+      },
+    ],
+    updatedAt: new Date().toISOString(),
+  };
+  await writeManifest(manifest);
+}
+
+async function projectExists(projectId: string): Promise<boolean> {
+  try {
+    const stat = await Deno.stat(new URL("project.json", projectUrl(projectId)));
+    return stat.isFile;
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) return false;
+    throw error;
+  }
+}
+
+async function listProjects(): Promise<Array<{ id: string; name: string; updatedAt: string }>> {
+  const result: Array<{ id: string; name: string; updatedAt: string }> = [];
+  try {
+    for await (const entry of Deno.readDir(PROJECTS_DIR)) {
+      if (!entry.isDirectory) continue;
+      try {
+        const manifest = await readManifest(entry.name);
+        result.push({ id: manifest.id, name: manifest.name, updatedAt: manifest.updatedAt });
+      } catch {
+        // Ignore incomplete or incompatible project folders.
+      }
+    }
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) throw error;
+  }
+  result.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return result;
+}
+
+async function createProject(name: string): Promise<ProjectManifest> {
+  const base = slugify(name) || "project";
+  const id = `${base}-${crypto.randomUUID().slice(0, 6)}`;
+  const dir = projectUrl(id);
+  await Deno.mkdir(new URL("objects/", dir), { recursive: true });
+
+  const manifest: ProjectManifest = {
+    version: 3,
+    id,
+    name,
+    objects: [],
+    objectFolders: [],
+    instances: [],
+    blackboard: {},
+    rules: [],
+    updatedAt: new Date().toISOString(),
+  };
+  await writeManifest(manifest);
+  return manifest;
+}
+
+async function addObject(projectId: string, rawName: string, rawFolder = ""): Promise<void> {
+  const manifest = await readManifest(projectId);
+  const objectName = pascalCase(rawName);
+  if (!objectName) throw new Error("Object name must contain letters or numbers.");
+
+  const folder = validateObjectFolder(rawFolder);
+  if (folder) {
+    await Deno.mkdir(objectFolderUrl(projectId, folder), { recursive: true });
+    if (!manifest.objectFolders.includes(folder)) manifest.objectFolders.push(folder);
+  }
+
+  let basename = `${objectName}.ts`;
+  let file = joinObjectPath(folder, basename);
+  let suffix = 2;
+  while (manifest.objects.includes(file)) {
+    basename = `${objectName}${suffix++}.ts`;
+    file = joinObjectPath(folder, basename);
+  }
+
+  const finalName = basename.replace(/\.ts$/, "");
+  await Deno.writeTextFile(objectUrl(projectId, file), objectTemplate(finalName));
+  manifest.objects.push(file);
+  manifest.instances.push({
+    id: uniqueInstanceId(lowerFirst(finalName), manifest.instances),
+    objectFile: file,
+  });
+  manifest.objectFolders = normalizeFolders(manifest.objectFolders, manifest.objects);
+  manifest.updatedAt = new Date().toISOString();
+  await writeManifest(manifest);
+}
+
+async function addObjectFolder(projectId: string, rawName: string, rawParent = ""): Promise<void> {
+  const manifest = await readManifest(projectId);
+  const parent = validateObjectFolder(rawParent);
+  const name = sanitizeFolderSegment(rawName);
+  const folder = validateObjectFolder(joinObjectPath(parent, name));
+  if (manifest.objectFolders.includes(folder)) throw new Error("Object folder already exists.");
+  await Deno.mkdir(objectFolderUrl(projectId, folder), { recursive: true });
+  manifest.objectFolders.push(folder);
+  manifest.objectFolders = normalizeFolders(manifest.objectFolders, manifest.objects);
+  manifest.updatedAt = new Date().toISOString();
+  await writeManifest(manifest);
+}
+
+async function moveObject(projectId: string, rawFile: string, rawFolder = ""): Promise<void> {
+  const manifest = await readManifest(projectId);
+  const file = validateObjectPath(rawFile);
+  if (!manifest.objects.includes(file)) throw new Error("Unknown object file.");
+  const folder = validateObjectFolder(rawFolder);
+  const basename = file.split("/").at(-1) ?? file;
+  const nextFile = validateObjectPath(joinObjectPath(folder, basename));
+  if (nextFile === file) return;
+  if (manifest.objects.includes(nextFile)) throw new Error("An object with that filename already exists in the target folder.");
+
+  if (folder) await Deno.mkdir(objectFolderUrl(projectId, folder), { recursive: true });
+  await Deno.rename(objectUrl(projectId, file), objectUrl(projectId, nextFile));
+  manifest.objects = manifest.objects.map((item) => item === file ? nextFile : item);
+  manifest.instances = manifest.instances.map((item) => item.objectFile === file ? { ...item, objectFile: nextFile } : item);
+  if (folder && !manifest.objectFolders.includes(folder)) manifest.objectFolders.push(folder);
+  manifest.objectFolders = normalizeFolders(manifest.objectFolders, manifest.objects);
+  manifest.updatedAt = new Date().toISOString();
+  await writeManifest(manifest);
+}
+
+async function loadProject(projectId: string): Promise<{
+  manifest: ProjectManifest;
+  objects: Array<{ file: string; source: string; compiled: string }>;
+}> {
+  const manifest = await readManifest(projectId);
+  const objects = [];
+  for (const file of manifest.objects) {
+    const source = await Deno.readTextFile(objectUrl(projectId, file));
+    const result = transpileObject(source, file);
+    objects.push({ file, source, compiled: result.output });
+  }
+  return { manifest, objects };
+}
+
+function transpileObject(source: string, file: string): { output: string; errors: string[] } {
+  const result = ts.transpileModule(source, {
+    fileName: file,
+    reportDiagnostics: true,
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.CommonJS,
+      strict: true,
+      esModuleInterop: false,
+    },
+  });
+
+  const errors = (result.diagnostics ?? [])
+    .filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error)
+    .map((diagnostic) => {
+      const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+      if (!diagnostic.file || diagnostic.start === undefined) return message;
+      const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
+      return `${file}:${position.line + 1}:${position.character + 1} ${message}`;
+    });
+
+  return { output: result.outputText, errors };
+}
+
+async function readManifest(projectId: string): Promise<ProjectManifest> {
+  const source = await Deno.readTextFile(new URL("project.json", projectUrl(validateProjectId(projectId))));
+  const manifest = JSON.parse(source) as Partial<ProjectManifest> & { version?: number; objectFolders?: unknown };
+  if (manifest.id !== projectId || (manifest.version !== 2 && manifest.version !== 3)) throw new Error("Invalid project manifest.");
+  return sanitizeLoadedManifest(manifest);
+}
+
+function sanitizeLoadedManifest(manifest: Partial<ProjectManifest> & { id?: string; version?: number; objectFolders?: unknown }): ProjectManifest {
+  const id = validateProjectId(String(manifest.id ?? ""));
+  const objects = Array.isArray(manifest.objects) ? manifest.objects.map(validateObjectPath) : [];
+  const explicitFolders = Array.isArray(manifest.objectFolders)
+    ? manifest.objectFolders.filter((value): value is string => typeof value === "string").map(validateObjectFolder).filter(Boolean)
+    : [];
+  return {
+    version: 3,
+    id,
+    name: typeof manifest.name === "string" && manifest.name.trim() ? manifest.name.trim() : id,
+    objects,
+    objectFolders: normalizeFolders(explicitFolders, objects),
+    instances: Array.isArray(manifest.instances)
+      ? manifest.instances.filter(isInstance).map((item) => ({ id: item.id, objectFile: validateObjectPath(item.objectFile) }))
+      : [],
+    blackboard: sanitizeBlackboard(manifest.blackboard),
+    rules: sanitizeRules(manifest.rules),
+    updatedAt: typeof manifest.updatedAt === "string" ? manifest.updatedAt : new Date().toISOString(),
+  };
+}
+
+async function writeManifest(manifest: ProjectManifest): Promise<void> {
+  const id = validateProjectId(manifest.id);
+  await Deno.mkdir(projectUrl(id), { recursive: true });
+  await Deno.writeTextFile(
+    new URL("project.json", projectUrl(id)),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
+}
+
+function sanitizeManifest(input: ProjectManifest, current: ProjectManifest): ProjectManifest {
+  const validObjects = new Set(current.objects);
+  const validInstances = new Set(current.instances.map((item) => item.id));
+
+  const blackboard = sanitizeBlackboard(input.blackboard);
+  const rules = sanitizeRules(input.rules).filter((rule) => {
+    if (!validInstances.has(rule.event.instanceId)) return false;
+    return rule.actions.every((step) => validInstances.has(step.action.instanceId));
+  });
+
+  return {
+    ...current,
+    name: typeof input.name === "string" && input.name.trim() ? input.name.trim() : current.name,
+    objects: current.objects.filter((file) => validObjects.has(file)),
+    objectFolders: normalizeFolders(current.objectFolders, current.objects),
+    instances: current.instances,
+    blackboard,
+    rules,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function sanitizeBlackboard(value: unknown): Record<string, BlackboardEntry> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: Record<string, BlackboardEntry> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]{0,47}$/.test(key)) continue;
+    if (!raw || typeof raw !== "object") continue;
+    const entry = raw as Partial<BlackboardEntry>;
+    const type = isPortType(entry.type) ? entry.type : "any";
+    result[key] = { type, value: entry.value };
+  }
+  return result;
+}
+
+function sanitizeRules(value: unknown): EventRule[] {
+  if (!Array.isArray(value)) return [];
+  const rules: EventRule[] = [];
+  for (const rawRule of value) {
+    if (!rawRule || typeof rawRule !== "object") continue;
+    const rule = rawRule as Partial<EventRule>;
+    if (!isEndpoint(rule.event)) continue;
+
+    const actions: ActionStep[] = [];
+    for (const rawStep of Array.isArray(rule.actions) ? rule.actions : []) {
+      if (!rawStep || typeof rawStep !== "object") continue;
+      const step = rawStep as Partial<ActionStep>;
+      if (!isEndpoint(step.action)) continue;
+      actions.push({
+        id: typeof step.id === "string" && step.id ? step.id : crypto.randomUUID(),
+        action: { instanceId: step.action.instanceId, name: step.action.name },
+        inputs: sanitizeBindings(step.inputs),
+        outputs: sanitizeOutputs(step.outputs),
+      });
+    }
+
+    rules.push({
+      id: typeof rule.id === "string" && rule.id ? rule.id : crypto.randomUUID(),
+      event: { instanceId: rule.event.instanceId, name: rule.event.name },
+      actions,
+    });
+  }
+  return rules;
+}
+
+function sanitizeBindings(value: unknown): Record<string, ValueBinding> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: Record<string, ValueBinding> = {};
