@@ -33,8 +33,9 @@ jobs:
           PY
       - name: Apply refactor
         run: python3 /tmp/apply-modular.py
-      - name: Remove one-shot workflows
-        run: rm -f .github/workflows/apply-modular-v04.yml .github/workflows/run-modular-v04.yml
+      - name: Restore workflow files for connector-managed updates
+        run: |
+          git checkout HEAD -- .github/workflows/ci.yml .github/workflows/apply-modular-v04.yml .github/workflows/run-modular-v04.yml
       - name: Validate type check
         run: deno task check
       - name: Validate tests
