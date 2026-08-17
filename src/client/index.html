@@ -46,6 +46,7 @@
             <h2>Objects</h2>
           </div>
           <div class="section-actions">
+            <button id="add-library-action" class="icon-button" title="Add ready action">⚡</button>
             <button id="add-folder" class="icon-button" title="New object folder">▱</button>
             <button id="add-object" class="icon-button" title="New object">＋</button>
           </div>
@@ -152,6 +153,20 @@
     <span class="statusbar-spacer"></span>
     <span id="project-meta">No project</span>
   </footer>
+
+  <dialog id="action-library-dialog" class="project-dialog">
+    <div class="project-dialog-shell">
+      <div class="project-dialog-head">
+        <div>
+<span class="eyebrow">READY ACTIONS</span>
+<h2>Action Library</h2>
+<p>Add a small, reusable action object to the selected object folder. No boilerplate required.</p>
+        </div>
+        <button id="close-action-library" class="icon-button" aria-label="Close action library">×</button>
+      </div>
+      <div id="action-library-grid" class="project-grid"></div>
+    </div>
+  </dialog>
 
   <dialog id="project-manager" class="project-dialog">
     <div class="project-dialog-shell">

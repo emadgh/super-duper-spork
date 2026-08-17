@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - feature/studio-v0.3
+      - "feature/**"
   pull_request:
     branches:
       - main
@@ -26,3 +26,43 @@ jobs:
         run: deno task test
       - name: Build
         run: deno task build
+      - name: Template and API smoke test
+        run: |
+          deno task dev > /tmp/studio-smoke.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/api/projects > /tmp/projects.json; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$pid" 2>/dev/null; then
+              cat /tmp/studio-smoke.log
+              exit 1
+            fi
+            sleep 0.5
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat /tmp/studio-smoke.log
+            exit 1
+          fi
+          grep -F "Calculator · Modular Demo" /tmp/projects.json
+          curl -fsS http://127.0.0.1:8000/api/projects/calculator-modular-demo > /tmp/calculator.json
+          curl -fsS http://127.0.0.1:8000/api/action-library > /tmp/actions.json
+          grep -F '"id":"math.add"' /tmp/actions.json
+          grep -F '"id":"math.divide"' /tmp/actions.json
+      - name: Package distributable
+        run: |
+          rm -rf artifacts package
+          mkdir -p artifacts package/src
+          cp -R dist package/dist
+          cp -R templates package/templates
+          cp src/server.ts package/src/server.ts
+          cp deno.json run.bat VERSION README.md package/
+          (cd package && zip -qr ../artifacts/super-duper-spork-studio-build.zip .)
+          git archive --format=zip --output=artifacts/super-duper-spork-studio-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-v0.4-artifacts
+          path: artifacts/*.zip

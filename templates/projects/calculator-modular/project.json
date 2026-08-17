@@ -1,0 +1,2596 @@
+{
+  "version": 3,
+  "id": "template",
+  "name": "Calculator · Modular Demo",
+  "objects": [
+    "UI/CalculatorShell.ts",
+    "UI/CalculatorDisplay.ts",
+    "UI/CalculatorKey.ts",
+    "Logic/Input/Digit.ts",
+    "Logic/Input/Decimal.ts",
+    "Logic/Input/Backspace.ts",
+    "Logic/Input/ClearEntry.ts",
+    "Logic/Input/ClearAll.ts",
+    "Logic/Operations/Add.ts",
+    "Logic/Operations/Subtract.ts",
+    "Logic/Operations/Multiply.ts",
+    "Logic/Operations/Divide.ts",
+    "Logic/Memory/Clear.ts",
+    "Logic/Memory/Recall.ts",
+    "Logic/Memory/Add.ts",
+    "Logic/Memory/Subtract.ts"
+  ],
+  "objectFolders": [
+    "UI",
+    "Logic",
+    "Logic/Input",
+    "Logic/Operations",
+    "Logic/Memory"
+  ],
+  "instances": [
+    {
+      "id": "shell",
+      "objectFile": "UI/CalculatorShell.ts"
+    },
+    {
+      "id": "displayView",
+      "objectFile": "UI/CalculatorDisplay.ts",
+      "parent": {
+        "instanceId": "shell",
+        "slot": "display"
+      }
+    },
+    {
+      "id": "digitCommand",
+      "objectFile": "Logic/Input/Digit.ts"
+    },
+    {
+      "id": "decimalCommand",
+      "objectFile": "Logic/Input/Decimal.ts"
+    },
+    {
+      "id": "backspaceCommand",
+      "objectFile": "Logic/Input/Backspace.ts"
+    },
+    {
+      "id": "clearEntryCommand",
+      "objectFile": "Logic/Input/ClearEntry.ts"
+    },
+    {
+      "id": "clearAllCommand",
+      "objectFile": "Logic/Input/ClearAll.ts"
+    },
+    {
+      "id": "addCommand",
+      "objectFile": "Logic/Operations/Add.ts"
+    },
+    {
+      "id": "subtractCommand",
+      "objectFile": "Logic/Operations/Subtract.ts"
+    },
+    {
+      "id": "multiplyCommand",
+      "objectFile": "Logic/Operations/Multiply.ts"
+    },
+    {
+      "id": "divideCommand",
+      "objectFile": "Logic/Operations/Divide.ts"
+    },
+    {
+      "id": "memoryClearCommand",
+      "objectFile": "Logic/Memory/Clear.ts"
+    },
+    {
+      "id": "memoryRecallCommand",
+      "objectFile": "Logic/Memory/Recall.ts"
+    },
+    {
+      "id": "memoryAddCommand",
+      "objectFile": "Logic/Memory/Add.ts"
+    },
+    {
+      "id": "memorySubtractCommand",
+      "objectFile": "Logic/Memory/Subtract.ts"
+    },
+    {
+      "id": "key_mc",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "MC",
+        "key": "MC",
+        "kind": "memory",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_mr",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "MR",
+        "key": "MR",
+        "kind": "memory",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_mplus",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "M+",
+        "key": "M+",
+        "kind": "memory",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_mminus",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "M-",
+        "key": "M-",
+        "kind": "memory",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_clear",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "C",
+        "key": "C",
+        "kind": "danger",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_ce",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "CE",
+        "key": "CE",
+        "kind": "danger",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_back",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "⌫",
+        "key": "BACK",
+        "kind": "danger",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_divide",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "÷",
+        "key": "DIV",
+        "kind": "operator",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_7",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "7",
+        "key": "7",
+        "kind": "digit",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_8",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "8",
+        "key": "8",
+        "kind": "digit",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_9",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "9",
+        "key": "9",
+        "kind": "digit",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_multiply",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "×",
+        "key": "MUL",
+        "kind": "operator",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_4",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "4",
+        "key": "4",
+        "kind": "digit",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_5",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "5",
+        "key": "5",
+        "kind": "digit",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_6",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "6",
+        "key": "6",
+        "kind": "digit",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_subtract",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "−",
+        "key": "SUB",
+        "kind": "operator",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_1",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "1",
+        "key": "1",
+        "kind": "digit",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_2",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "2",
+        "key": "2",
+        "kind": "digit",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_3",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "3",
+        "key": "3",
+        "kind": "digit",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_add",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "+",
+        "key": "ADD",
+        "kind": "operator",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_0",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "0",
+        "key": "0",
+        "kind": "digit",
+        "span": 2
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_decimal",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": ".",
+        "key": "DEC",
+        "kind": "digit",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    },
+    {
+      "id": "key_equals",
+      "objectFile": "UI/CalculatorKey.ts",
+      "props": {
+        "label": "=",
+        "key": "EQUALS",
+        "kind": "equals",
+        "span": 1
+      },
+      "parent": {
+        "instanceId": "shell",
+        "slot": "keypad"
+      }
+    }
+  ],
+  "blackboard": {
+    "entry": {
+      "type": "string",
+      "value": "0"
+    },
+    "display": {
+      "type": "string",
+      "value": "0"
+    },
+    "left": {
+      "type": "number",
+      "value": 0
+    },
+    "operator": {
+      "type": "string",
+      "value": ""
+    },
+    "waiting": {
+      "type": "boolean",
+      "value": true
+    },
+    "expression": {
+      "type": "string",
+      "value": ""
+    },
+    "memory": {
+      "type": "number",
+      "value": 0
+    }
+  },
+  "rules": [
+    {
+      "id": "digit-0",
+      "event": {
+        "instanceId": "key_0",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "digit-0-input",
+          "action": {
+            "instanceId": "digitCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "digit": {
+              "kind": "event",
+              "path": "key"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            },
+            "waiting": {
+              "kind": "blackboard",
+              "key": "waiting"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            }
+          }
+        },
+        {
+          "id": "digit-0-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "digit-1",
+      "event": {
+        "instanceId": "key_1",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "digit-1-input",
+          "action": {
+            "instanceId": "digitCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "digit": {
+              "kind": "event",
+              "path": "key"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            },
+            "waiting": {
+              "kind": "blackboard",
+              "key": "waiting"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            }
+          }
+        },
+        {
+          "id": "digit-1-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "digit-2",
+      "event": {
+        "instanceId": "key_2",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "digit-2-input",
+          "action": {
+            "instanceId": "digitCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "digit": {
+              "kind": "event",
+              "path": "key"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            },
+            "waiting": {
+              "kind": "blackboard",
+              "key": "waiting"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            }
+          }
+        },
+        {
+          "id": "digit-2-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "digit-3",
+      "event": {
+        "instanceId": "key_3",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "digit-3-input",
+          "action": {
+            "instanceId": "digitCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "digit": {
+              "kind": "event",
+              "path": "key"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            },
+            "waiting": {
+              "kind": "blackboard",
+              "key": "waiting"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            }
+          }
+        },
+        {
+          "id": "digit-3-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "digit-4",
+      "event": {
+        "instanceId": "key_4",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "digit-4-input",
+          "action": {
+            "instanceId": "digitCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "digit": {
+              "kind": "event",
+              "path": "key"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            },
+            "waiting": {
+              "kind": "blackboard",
+              "key": "waiting"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            }
+          }
+        },
+        {
+          "id": "digit-4-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "digit-5",
+      "event": {
+        "instanceId": "key_5",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "digit-5-input",
+          "action": {
+            "instanceId": "digitCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "digit": {
+              "kind": "event",
+              "path": "key"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            },
+            "waiting": {
+              "kind": "blackboard",
+              "key": "waiting"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            }
+          }
+        },
+        {
+          "id": "digit-5-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "digit-6",
+      "event": {
+        "instanceId": "key_6",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "digit-6-input",
+          "action": {
+            "instanceId": "digitCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "digit": {
+              "kind": "event",
+              "path": "key"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            },
+            "waiting": {
+              "kind": "blackboard",
+              "key": "waiting"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            }
+          }
+        },
+        {
+          "id": "digit-6-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "digit-7",
+      "event": {
+        "instanceId": "key_7",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "digit-7-input",
+          "action": {
+            "instanceId": "digitCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "digit": {
+              "kind": "event",
+              "path": "key"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            },
+            "waiting": {
+              "kind": "blackboard",
+              "key": "waiting"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            }
+          }
+        },
+        {
+          "id": "digit-7-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "digit-8",
+      "event": {
+        "instanceId": "key_8",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "digit-8-input",
+          "action": {
+            "instanceId": "digitCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "digit": {
+              "kind": "event",
+              "path": "key"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            },
+            "waiting": {
+              "kind": "blackboard",
+              "key": "waiting"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            }
+          }
+        },
+        {
+          "id": "digit-8-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "digit-9",
+      "event": {
+        "instanceId": "key_9",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "digit-9-input",
+          "action": {
+            "instanceId": "digitCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "digit": {
+              "kind": "event",
+              "path": "key"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            },
+            "waiting": {
+              "kind": "blackboard",
+              "key": "waiting"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            }
+          }
+        },
+        {
+          "id": "digit-9-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "decimal",
+      "event": {
+        "instanceId": "key_decimal",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "decimal-input",
+          "action": {
+            "instanceId": "decimalCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            },
+            "waiting": {
+              "kind": "blackboard",
+              "key": "waiting"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            }
+          }
+        },
+        {
+          "id": "decimal-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "backspace",
+      "event": {
+        "instanceId": "key_back",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "backspace-input",
+          "action": {
+            "instanceId": "backspaceCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            },
+            "waiting": {
+              "kind": "blackboard",
+              "key": "waiting"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            }
+          }
+        },
+        {
+          "id": "backspace-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "clear-entry",
+      "event": {
+        "instanceId": "key_ce",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "clear-entry-input",
+          "action": {
+            "instanceId": "clearEntryCommand",
+            "name": "execute"
+          },
+          "inputs": {},
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            }
+          }
+        },
+        {
+          "id": "clear-entry-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "clear-all",
+      "event": {
+        "instanceId": "key_clear",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "clear-all-input",
+          "action": {
+            "instanceId": "clearAllCommand",
+            "name": "execute"
+          },
+          "inputs": {},
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "clear-all-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "select-add",
+      "event": {
+        "instanceId": "key_add",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "select-add-apply-add",
+          "action": {
+            "instanceId": "addCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-add-apply-subtract",
+          "action": {
+            "instanceId": "subtractCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-add-apply-multiply",
+          "action": {
+            "instanceId": "multiplyCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-add-apply-divide",
+          "action": {
+            "instanceId": "divideCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-add-select",
+          "action": {
+            "instanceId": "addCommand",
+            "name": "select"
+          },
+          "inputs": {
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-add-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "select-subtract",
+      "event": {
+        "instanceId": "key_subtract",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "select-subtract-apply-add",
+          "action": {
+            "instanceId": "addCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-subtract-apply-subtract",
+          "action": {
+            "instanceId": "subtractCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-subtract-apply-multiply",
+          "action": {
+            "instanceId": "multiplyCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-subtract-apply-divide",
+          "action": {
+            "instanceId": "divideCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-subtract-select",
+          "action": {
+            "instanceId": "subtractCommand",
+            "name": "select"
+          },
+          "inputs": {
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-subtract-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "select-multiply",
+      "event": {
+        "instanceId": "key_multiply",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "select-multiply-apply-add",
+          "action": {
+            "instanceId": "addCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-multiply-apply-subtract",
+          "action": {
+            "instanceId": "subtractCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-multiply-apply-multiply",
+          "action": {
+            "instanceId": "multiplyCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-multiply-apply-divide",
+          "action": {
+            "instanceId": "divideCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-multiply-select",
+          "action": {
+            "instanceId": "multiplyCommand",
+            "name": "select"
+          },
+          "inputs": {
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-multiply-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "select-divide",
+      "event": {
+        "instanceId": "key_divide",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "select-divide-apply-add",
+          "action": {
+            "instanceId": "addCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-divide-apply-subtract",
+          "action": {
+            "instanceId": "subtractCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-divide-apply-multiply",
+          "action": {
+            "instanceId": "multiplyCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-divide-apply-divide",
+          "action": {
+            "instanceId": "divideCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-divide-select",
+          "action": {
+            "instanceId": "divideCommand",
+            "name": "select"
+          },
+          "inputs": {
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "select-divide-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "equals",
+      "event": {
+        "instanceId": "key_equals",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "equals-apply-add",
+          "action": {
+            "instanceId": "addCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "equals-apply-subtract",
+          "action": {
+            "instanceId": "subtractCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "equals-apply-multiply",
+          "action": {
+            "instanceId": "multiplyCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "equals-apply-divide",
+          "action": {
+            "instanceId": "divideCommand",
+            "name": "apply"
+          },
+          "inputs": {
+            "operator": {
+              "kind": "blackboard",
+              "key": "operator"
+            },
+            "left": {
+              "kind": "blackboard",
+              "key": "left"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "left": {
+              "blackboardKey": "left"
+            },
+            "operator": {
+              "blackboardKey": "operator"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            },
+            "expression": {
+              "blackboardKey": "expression"
+            }
+          }
+        },
+        {
+          "id": "equals-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "memory-clear",
+      "event": {
+        "instanceId": "key_mc",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "memory-clear-action",
+          "action": {
+            "instanceId": "memoryClearCommand",
+            "name": "execute"
+          },
+          "inputs": {},
+          "outputs": {
+            "memory": {
+              "blackboardKey": "memory"
+            }
+          }
+        },
+        {
+          "id": "memory-clear-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "memory-recall",
+      "event": {
+        "instanceId": "key_mr",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "memory-recall-action",
+          "action": {
+            "instanceId": "memoryRecallCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {
+            "entry": {
+              "blackboardKey": "entry"
+            },
+            "display": {
+              "blackboardKey": "display"
+            },
+            "waiting": {
+              "blackboardKey": "waiting"
+            }
+          }
+        },
+        {
+          "id": "memory-recall-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "memory-add",
+      "event": {
+        "instanceId": "key_mplus",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "memory-add-action",
+          "action": {
+            "instanceId": "memoryAddCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "memory": {
+              "blackboardKey": "memory"
+            }
+          }
+        },
+        {
+          "id": "memory-add-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "memory-subtract",
+      "event": {
+        "instanceId": "key_mminus",
+        "name": "pressed"
+      },
+      "actions": [
+        {
+          "id": "memory-subtract-action",
+          "action": {
+            "instanceId": "memorySubtractCommand",
+            "name": "execute"
+          },
+          "inputs": {
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            },
+            "entry": {
+              "kind": "blackboard",
+              "key": "entry"
+            }
+          },
+          "outputs": {
+            "memory": {
+              "blackboardKey": "memory"
+            }
+          }
+        },
+        {
+          "id": "memory-subtract-view",
+          "action": {
+            "instanceId": "displayView",
+            "name": "setView"
+          },
+          "inputs": {
+            "display": {
+              "kind": "blackboard",
+              "key": "display"
+            },
+            "expression": {
+              "kind": "blackboard",
+              "key": "expression"
+            },
+            "memory": {
+              "kind": "blackboard",
+              "key": "memory"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    }
+  ],
+  "updatedAt": "template"
+}

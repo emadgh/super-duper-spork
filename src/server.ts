@@ -10,6 +10,8 @@ interface BlackboardEntry {
 interface ProjectInstance {
   id: string;
   objectFile: string;
+  props?: Record<string, unknown>;
+  parent?: { instanceId: string; slot: string };
 }
 
 interface EventEndpoint {
@@ -51,6 +53,7 @@ interface ProjectManifest {
 
 const ROOT = new URL("../", import.meta.url);
 const PROJECTS_DIR = new URL("workspace/projects/", ROOT);
+const TEMPLATES_DIR = new URL("templates/", ROOT);
 const DIST_MODE = Deno.args.includes("--dist");
 const PORT = 8000;
 
@@ -77,6 +80,10 @@ async function main(): Promise<void> {
 
 async function handleApi(request: Request, url: URL): Promise<Response> {
   const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+
+  if (parts.length === 2 && parts[0] === "api" && parts[1] === "action-library" && request.method === "GET") {
+    return json(listReadyActionTemplates());
+  }
 
   if (parts.length === 2 && parts[0] === "api" && parts[1] === "projects") {
     if (request.method === "GET") {
@@ -121,6 +128,14 @@ async function handleApi(request: Request, url: URL): Promise<Response> {
       const name = body.name?.trim();
       if (!name) return json({ error: "Folder name is required." }, 400);
       await addObjectFolder(projectId, name, body.parent ?? "");
+      return json(await loadProject(projectId), 201);
+    }
+
+    if (parts.length === 4 && parts[3] === "action-library" && request.method === "POST") {
+      const body = await readJson<{ templateId?: string; folder?: string }>(request);
+      const templateId = body.templateId?.trim();
+      if (!templateId) return json({ error: "Action template id is required." }, 400);
+      await addReadyAction(projectId, templateId, body.folder ?? "");
       return json(await loadProject(projectId), 201);
     }
 
@@ -208,7 +223,7 @@ async function ensureWorkspace(): Promise<void> {
   await Deno.mkdir(PROJECTS_DIR, { recursive: true });
   await ensureCounterDemo();
   await ensureCalculatorDemo();
-  await ensureRealCalculatorDemo();
+  await ensureProjectTemplate("calculator-modular-demo", "Calculator · Modular Demo", "calculator-modular");
 }
 
 async function ensureCounterDemo(): Promise<void> {
@@ -372,6 +387,87 @@ async function ensureRealCalculatorDemo(): Promise<void> {
     ],
     updatedAt: new Date().toISOString(),
   };
+  await writeManifest(manifest);
+}
+
+
+interface ReadyActionTemplate {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  defaultFile: string;
+  templatePath: string;
+}
+
+const READY_ACTION_TEMPLATES: ReadyActionTemplate[] = [
+  { id: "math.add", name: "Add", category: "Math", description: "Add two numbers.", defaultFile: "Add.ts", templatePath: "actions/math/Add.ts" },
+  { id: "math.subtract", name: "Subtract", category: "Math", description: "Subtract right from left.", defaultFile: "Subtract.ts", templatePath: "actions/math/Subtract.ts" },
+  { id: "math.multiply", name: "Multiply", category: "Math", description: "Multiply two numbers.", defaultFile: "Multiply.ts", templatePath: "actions/math/Multiply.ts" },
+  { id: "math.divide", name: "Divide", category: "Math", description: "Divide left by right with zero protection.", defaultFile: "Divide.ts", templatePath: "actions/math/Divide.ts" },
+  { id: "math.modulo", name: "Modulo", category: "Math", description: "Return the division remainder.", defaultFile: "Modulo.ts", templatePath: "actions/math/Modulo.ts" },
+  { id: "number.clamp", name: "Clamp", category: "Number", description: "Clamp a number between minimum and maximum.", defaultFile: "Clamp.ts", templatePath: "actions/number/Clamp.ts" },
+  { id: "number.round", name: "Round", category: "Number", description: "Round a number to a chosen number of decimals.", defaultFile: "Round.ts", templatePath: "actions/number/Round.ts" },
+  { id: "text.concat", name: "Concat Text", category: "Text", description: "Join two text values.", defaultFile: "Concat.ts", templatePath: "actions/text/Concat.ts" },
+  { id: "logic.equals", name: "Equals", category: "Logic", description: "Compare two values using Object.is.", defaultFile: "Equals.ts", templatePath: "actions/logic/Equals.ts" },
+  { id: "state.set-value", name: "Set Value", category: "State", description: "Pass a value through so it can be written to Blackboard.", defaultFile: "SetValue.ts", templatePath: "actions/state/SetValue.ts" },
+];
+
+function listReadyActionTemplates(): Array<Omit<ReadyActionTemplate, "templatePath">> {
+  return READY_ACTION_TEMPLATES.map(({ templatePath: _templatePath, ...summary }) => summary);
+}
+
+async function addReadyAction(projectId: string, templateId: string, rawFolder: string): Promise<void> {
+  const template = READY_ACTION_TEMPLATES.find((item) => item.id === templateId);
+  if (!template) throw new Error("Unknown action template.");
+  const manifest = await readManifest(projectId);
+  const folder = validateObjectFolder(rawFolder || `Actions/${template.category}`);
+  const baseName = template.defaultFile.replace(/\.ts$/, "");
+  let file = folder ? `${folder}/${template.defaultFile}` : template.defaultFile;
+  let index = 2;
+  while (manifest.objects.includes(file)) {
+    file = folder ? `${folder}/${baseName}${index}.ts` : `${baseName}${index}.ts`;
+    index++;
+  }
+  file = validateObjectPath(file);
+  const source = await Deno.readTextFile(new URL(template.templatePath, TEMPLATES_DIR));
+  const result = transpileObject(source, file);
+  if (result.errors.length) throw new Error(result.errors.join("\n"));
+  const target = objectUrl(projectId, file);
+  await Deno.mkdir(new URL(".", target), { recursive: true });
+  await Deno.writeTextFile(target, source);
+  manifest.objects.push(file);
+  manifest.objectFolders = normalizeFolders([...manifest.objectFolders, folder], manifest.objects);
+  manifest.instances.push({ id: uniqueInstanceId(baseName, manifest.instances), objectFile: file });
+  manifest.updatedAt = new Date().toISOString();
+  await writeManifest(manifest);
+}
+
+async function ensureProjectTemplate(projectId: string, name: string, templateName: string): Promise<void> {
+  if (await projectExists(projectId)) return;
+  const templateRoot = new URL(`projects/${templateName}/`, TEMPLATES_DIR);
+  const raw = JSON.parse(await Deno.readTextFile(new URL("project.json", templateRoot))) as ProjectManifest;
+  const manifest: ProjectManifest = {
+    ...raw,
+    version: 3,
+    id: projectId,
+    name,
+    objects: raw.objects.map(validateObjectPath),
+    objectFolders: normalizeFolders(raw.objectFolders ?? [], raw.objects),
+    instances: raw.instances.filter(isInstance).map(sanitizeProjectInstance),
+    blackboard: sanitizeBlackboard(raw.blackboard),
+    rules: sanitizeRules(raw.rules),
+    updatedAt: new Date().toISOString(),
+  };
+  await Deno.mkdir(new URL("objects/", projectUrl(projectId)), { recursive: true });
+  for (const file of manifest.objects) {
+    const source = await Deno.readTextFile(new URL(`objects/${file}`, templateRoot));
+    const result = transpileObject(source, file);
+    if (result.errors.length) throw new Error(`Template ${file}: ${result.errors.join("\n")}`);
+    const target = objectUrl(projectId, file);
+    await Deno.mkdir(new URL(".", target), { recursive: true });
+    await Deno.writeTextFile(target, source);
+  }
   await writeManifest(manifest);
 }
 
@@ -547,7 +643,7 @@ function sanitizeLoadedManifest(manifest: Omit<Partial<ProjectManifest>, "versio
     objects,
     objectFolders: normalizeFolders(explicitFolders, objects),
     instances: Array.isArray(manifest.instances)
-      ? manifest.instances.filter(isInstance).map((item) => ({ id: item.id, objectFile: validateObjectPath(item.objectFile) }))
+      ? manifest.instances.filter(isInstance).map(sanitizeProjectInstance)
       : [],
     blackboard: sanitizeBlackboard(manifest.blackboard),
     rules: sanitizeRules(manifest.rules),
@@ -667,6 +763,22 @@ function isEndpoint(value: unknown): value is EventEndpoint {
   const endpoint = value as Partial<EventEndpoint>;
   return typeof endpoint.instanceId === "string" && endpoint.instanceId.length > 0 &&
     typeof endpoint.name === "string" && endpoint.name.length > 0;
+}
+
+function sanitizeProjectInstance(item: ProjectInstance): ProjectInstance {
+  const props = item.props && typeof item.props === "object" && !Array.isArray(item.props)
+    ? structuredClone(item.props)
+    : undefined;
+  const parent = item.parent && typeof item.parent === "object" &&
+      typeof item.parent.instanceId === "string" && typeof item.parent.slot === "string"
+    ? { instanceId: item.parent.instanceId, slot: item.parent.slot }
+    : undefined;
+  return {
+    id: item.id,
+    objectFile: validateObjectPath(item.objectFile),
+    ...(props ? { props } : {}),
+    ...(parent ? { parent } : {}),
+  };
 }
 
 function isInstance(value: unknown): value is ProjectInstance {

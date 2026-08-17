@@ -1,0 +1,1 @@
+export default defineObject({ name: "MemorySubtract", actions: { execute: { inputs: { memory: { type: "number" }, entry: { type: "string" } }, outputs: { memory: { type: "number" } }, run(_context, inputs) { return { memory: Number(inputs.memory ?? 0) - Number(inputs.entry ?? 0) }; } } } });

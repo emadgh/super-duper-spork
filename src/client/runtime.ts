@@ -12,6 +12,7 @@ interface RuntimeInstance {
   id: string;
   definition: ObjectDefinition;
   state: Record<string, unknown>;
+  props: Readonly<Record<string, unknown>>;
   mount?: MountedObject;
 }
 
@@ -54,38 +55,71 @@ export class EventRuntime {
         id: instance.id,
         definition,
         state: cloneState(definition.state ?? {}),
+        props: Object.freeze(structuredClone(instance.props ?? {})),
       });
     }
   }
 
   mountPreview(root: HTMLElement): void {
     root.replaceChildren();
+    const mounted = new Set<string>();
 
-    for (const instance of this.#instances) {
+    const mountInstance = (instance: ProjectInstance, target: HTMLElement, embedded: boolean): void => {
+      if (mounted.has(instance.id)) return;
       const runtimeInstance = this.#runtimeInstances.get(instance.id);
-      if (!runtimeInstance || !runtimeInstance.definition.mount) continue;
+      if (!runtimeInstance || !runtimeInstance.definition.mount) return;
+      mounted.add(instance.id);
 
-      const card = document.createElement("section");
-      card.className = "preview-object";
-      card.dataset.instanceId = instance.id;
+      let host: HTMLElement;
+      if (embedded) {
+        host = document.createElement("div");
+        host.className = "preview-component";
+        host.dataset.instanceId = instance.id;
+        target.append(host);
+      } else {
+        const card = document.createElement("section");
+        card.className = "preview-object";
+        card.dataset.instanceId = instance.id;
 
-      const header = document.createElement("div");
-      header.className = "preview-object__title";
-      header.innerHTML = `<span>${escapeHtml(runtimeInstance.definition.name)}</span><code>${escapeHtml(instance.id)}</code>`;
+        const header = document.createElement("div");
+        header.className = "preview-object__title";
+        header.innerHTML = `<span>${escapeHtml(runtimeInstance.definition.name)}</span><code>${escapeHtml(instance.id)}</code>`;
 
-      const host = document.createElement("div");
-      host.className = "preview-object__host";
+        host = document.createElement("div");
+        host.className = "preview-object__host";
+        card.append(header, host);
+        target.append(card);
+      }
 
-      card.append(header, host);
-      root.append(card);
-
-      const mounted = runtimeInstance.definition.mount({
+      const mountedObject = runtimeInstance.definition.mount({
         host,
         state: runtimeInstance.state,
+        props: runtimeInstance.props,
         emit: (eventName, payload) => this.emit(instance.id, eventName, payload),
       });
+      runtimeInstance.mount = mountedObject || undefined;
 
-      runtimeInstance.mount = mounted || undefined;
+      const children = this.#instances.filter((candidate) => candidate.parent?.instanceId === instance.id);
+      for (const child of children) {
+        const slotName = child.parent?.slot ?? "";
+        const slot = runtimeInstance.mount?.slots?.[slotName];
+        if (!slot) {
+          this.#trace("error", `${child.id}.mount`, `Parent ${instance.id} does not expose slot ${slotName || "<empty>"}`);
+          continue;
+        }
+        mountInstance(child, slot, true);
+      }
+    };
+
+    for (const instance of this.#instances.filter((item) => !item.parent)) mountInstance(instance, root, false);
+
+    // Invalid/missing parents should not make a visual component disappear silently.
+    for (const instance of this.#instances) {
+      if (mounted.has(instance.id)) continue;
+      const runtimeInstance = this.#runtimeInstances.get(instance.id);
+      if (!runtimeInstance?.definition.mount) continue;
+      this.#trace("error", `${instance.id}.mount`, "Component parent could not be resolved; mounted as a root object.");
+      mountInstance({ ...instance, parent: undefined }, root, false);
     }
   }
 
@@ -143,6 +177,7 @@ export class EventRuntime {
     const result = action.run(
       {
         state: target.state,
+        props: target.props,
         payload: eventPayload,
         emit: (nextEventName, nextPayload) => this.emit(target.id, nextEventName, nextPayload),
       },
@@ -168,16 +203,11 @@ export class EventRuntime {
     previousOutputs: Map<string, Record<string, unknown>>,
   ): unknown {
     switch (binding.kind) {
-      case "literal":
-        return binding.value;
-      case "blackboard":
-        return this.#blackboard[binding.key]?.value;
-      case "state":
-        return getPath(this.#runtimeInstances.get(binding.instanceId)?.state, binding.path);
-      case "event":
-        return getPath(eventPayload, binding.path);
-      case "output":
-        return previousOutputs.get(binding.stepId)?.[binding.name];
+      case "literal": return binding.value;
+      case "blackboard": return this.#blackboard[binding.key]?.value;
+      case "state": return getPath(this.#runtimeInstances.get(binding.instanceId)?.state, binding.path);
+      case "event": return getPath(eventPayload, binding.path);
+      case "output": return previousOutputs.get(binding.stepId)?.[binding.name];
     }
   }
 
@@ -211,11 +241,7 @@ function errorMessage(error: unknown): string {
 }
 
 function escapeHtml(value: string): string {
-  return value.replace(/[&<>'"]/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "'": "&#39;",
-    '"': "&quot;",
+  return value.replace(/[&<>'\"]/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '\"': "&quot;",
   }[char] ?? char));
 }

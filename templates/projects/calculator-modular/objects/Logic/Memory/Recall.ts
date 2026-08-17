@@ -1,0 +1,1 @@
+export default defineObject({ name: "MemoryRecall", actions: { execute: { inputs: { memory: { type: "number" } }, outputs: { entry: { type: "string" }, display: { type: "string" }, waiting: { type: "boolean" } }, run(_context, inputs) { const value = String(Number(inputs.memory ?? 0)); return { entry: value, display: value, waiting: false }; } } } });

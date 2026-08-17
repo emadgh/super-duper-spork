@@ -174,3 +174,27 @@ function assertEquals(actual: unknown, expected: unknown): void {
     throw new Error(`Expected ${String(expected)}, got ${String(actual)}`);
   }
 }
+
+
+Deno.test("instance props are available to actions", () => {
+  const definitions = new Map<string, ObjectDefinition>([["Scale.ts", {
+    name: "Scale",
+    actions: {
+      execute: {
+        inputs: { value: { type: "number" } },
+        outputs: { result: { type: "number" } },
+        run(context, inputs) {
+          return { result: Number(inputs.value ?? 0) * Number(context.props.factor ?? 1) };
+        },
+      },
+    },
+  }]]);
+  const runtime = new EventRuntime(
+    definitions,
+    [{ id: "scale1", objectFile: "Scale.ts", props: { factor: 4 } }],
+    [{ id: "rule", event: { instanceId: "scale1", name: "go" }, actions: [{ id: "scale-step", action: { instanceId: "scale1", name: "execute" }, inputs: { value: { kind: "event", path: "value" } }, outputs: { result: { blackboardKey: "answer" } } }] }],
+    { answer: { type: "number", value: 0 } },
+  );
+  runtime.emit("scale1", "go", { value: 3 });
+  assertEquals(runtime.getBlackboard().answer.value, 12);
+});

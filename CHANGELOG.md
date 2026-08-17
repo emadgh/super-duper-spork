@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 - Modular components and ready actions
+
+- Added parent/child UI composition with named slots.
+- Added per-instance props so one reusable component file can back many configured component instances.
+- Rebuilt the calculator example as a modular project template instead of a two-file UI/engine God Component pair.
+- Every calculator key is an independent component instance of `UI/CalculatorKey.ts`.
+- Add, Subtract, Multiply, and Divide are independent command files; input, clear, backspace, and memory commands are split as well.
+- Added an Action Library with ready Math, Number, Text, Logic, and State actions.
+- Ready actions can be inserted from the Objects panel with the lightning button.
+- CI now validates all feature branches and publishes build/source artifacts.
+
+
 ## 0.3.0 - Diagram, object folders, reveal, real calculator
 
 - Added a read-only Connection Diagram for visualizing Event → Action flow as nodes.
