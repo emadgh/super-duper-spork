@@ -1,0 +1,357 @@
+    button.textContent = "Calculate";
+
+    const update = () => {
+      left.value = String(state.left ?? 0);
+      right.value = String(state.right ?? 0);
+      operator.value = String(state.operator ?? "+");
+    };
+
+    left.addEventListener("input", () => state.left = Number(left.value || 0));
+    right.addEventListener("input", () => state.right = Number(right.value || 0));
+    operator.addEventListener("change", () => state.operator = operator.value);
+    button.addEventListener("click", () => {
+      emit("calculate", {
+        left: Number(state.left ?? 0),
+        right: Number(state.right ?? 0),
+        operator: String(state.operator ?? "+"),
+      });
+    });
+
+    form.append(left, operator, right, button);
+    host.append(form);
+    update();
+
+    return {
+      update,
+      dispose() {
+        form.remove();
+      },
+    };
+  },
+});
+`;
+
+const CALCULATOR_LOGIC_SOURCE = `export default defineObject({
+  name: "Calculator",
+  description: "Pure calculator logic. It knows nothing about the form or result display.",
+
+  state: {},
+  events: {},
+
+  actions: {
+    calculate: {
+      label: "Calculate",
+      inputs: {
+        left: { type: "number", label: "Left", default: 0 },
+        right: { type: "number", label: "Right", default: 0 },
+        operator: { type: "string", label: "Operator", default: "+" },
+      },
+      outputs: {
+        result: { type: "number", label: "Result" },
+        expression: { type: "string", label: "Expression" },
+      },
+      run(_context, inputs) {
+        const left = Number(inputs.left ?? 0);
+        const right = Number(inputs.right ?? 0);
+        const operator = String(inputs.operator ?? "+");
+
+        let result = 0;
+        if (operator === "+") result = left + right;
+        else if (operator === "-") result = left - right;
+        else if (operator === "×" || operator === "*") result = left * right;
+        else if (operator === "÷" || operator === "/") result = right === 0 ? Number.NaN : left / right;
+
+        return {
+          result,
+          expression: left + " " + operator + " " + right + " = " + result,
+        };
+      },
+    },
+  },
+
+  mount({ host }) {
+    const element = document.createElement("div");
+    element.className = "logic-object";
+    element.textContent = "Logic object · no direct UI";
+    host.append(element);
+    return { dispose() { element.remove(); } };
+  },
+});
+`;
+
+const RESULT_DISPLAY_SOURCE = `export default defineObject({
+  name: "ResultDisplay",
+  description: "Displays a numeric value passed in through an action input.",
+
+  state: {
+    value: 0,
+  },
+
+  events: {},
+
+  actions: {
+    setValue: {
+      label: "Set value",
+      inputs: {
+        value: { type: "number", label: "Value", default: 0 },
+      },
+      run(context, inputs) {
+        context.state.value = Number(inputs.value ?? 0);
+      },
+    },
+  },
+
+  mount({ host, state }) {
+    const wrap = document.createElement("div");
+    wrap.className = "result-card";
+    const caption = document.createElement("span");
+    caption.textContent = "Result";
+    const value = document.createElement("strong");
+    value.className = "result-display";
+    wrap.append(caption, value);
+
+    const update = () => {
+      value.textContent = String(state.value ?? 0);
+    };
+
+    host.append(wrap);
+    update();
+    return {
+      update,
+      dispose() { wrap.remove(); },
+    };
+  },
+});
+`;
+
+
+const REAL_CALCULATOR_SHELL_SOURCE = `export default defineObject({
+  name: "CalculatorShell",
+  description: "Visual calculator surface. It emits key presses and only renders values it receives through actions.",
+
+  state: {
+    display: "0",
+    expression: "",
+    memory: "",
+  },
+
+  events: {
+    keyPressed: {
+      label: "Key pressed",
+      description: "Fires for every calculator key. The shell does not calculate anything itself.",
+      outputs: {
+        key: { type: "string", label: "Key" },
+      },
+    },
+  },
+
+  actions: {
+    setView: {
+      label: "Set calculator view",
+      inputs: {
+        display: { type: "string", label: "Display", default: "0" },
+        expression: { type: "string", label: "Expression", default: "" },
+        memory: { type: "string", label: "Memory", default: "" },
+      },
+      run(context, inputs) {
+        context.state.display = String(inputs.display ?? "0");
+        context.state.expression = String(inputs.expression ?? "");
+        context.state.memory = String(inputs.memory ?? "");
+      },
+    },
+  },
+
+  mount({ host, state, emit }) {
+    const root = document.createElement("div");
+    root.className = "real-calculator";
+
+    const top = document.createElement("div");
+    top.className = "real-calculator__screen";
+    const memory = document.createElement("div");
+    memory.className = "real-calculator__memory";
+    const expression = document.createElement("div");
+    expression.className = "real-calculator__expression";
+    const display = document.createElement("div");
+    display.className = "real-calculator__display";
+    top.append(memory, expression, display);
+
+    const keys = document.createElement("div");
+    keys.className = "real-calculator__keys";
+    const rows = [
+      ["MC", "MR", "M+", "M-"],
+      ["C", "CE", "⌫", "÷"],
+      ["7", "8", "9", "×"],
+      ["4", "5", "6", "−"],
+      ["1", "2", "3", "+"],
+      ["0", ".", "=", "="],
+    ];
+
+    for (const row of rows) {
+      for (let index = 0; index < row.length; index++) {
+        const key = row[index];
+        if (key === "=" && index === 3) continue;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = key;
+        button.dataset.key = key;
+        button.className = "real-calculator__key";
+        if (["÷", "×", "−", "+"].includes(key)) button.classList.add("is-operator");
+        if (["MC", "MR", "M+", "M-"].includes(key)) button.classList.add("is-memory");
+        if (["C", "CE", "⌫"].includes(key)) button.classList.add("is-control");
+        if (key === "0") button.classList.add("is-zero");
+        if (key === "=") button.classList.add("is-equals");
+        button.addEventListener("click", () => emit("keyPressed", { key }));
+        keys.append(button);
+      }
+    }
+
+    root.append(top, keys);
+    host.append(root);
+
+    const update = () => {
+      memory.textContent = String(state.memory ?? "");
+      expression.textContent = String(state.expression ?? "");
+      display.textContent = String(state.display ?? "0");
+      display.title = String(state.display ?? "0");
+    };
+    update();
+
+    return {
+      update,
+      dispose() { root.remove(); },
+    };
+  },
+});
+`;
+
+const REAL_CALCULATOR_ENGINE_SOURCE = `export default defineObject({
+  name: "CalculatorEngine",
+  description: "Stateful calculator logic. It has no UI and knows nothing about CalculatorShell.",
+
+  state: {
+    display: "0",
+    accumulator: null,
+    operator: "",
+    waitingForOperand: false,
+    expression: "",
+    memory: 0,
+  },
+
+  events: {},
+
+  actions: {
+    pressKey: {
+      label: "Press calculator key",
+      description: "Processes one calculator key and returns the complete view model.",
+      inputs: {
+        key: { type: "string", label: "Key", default: "0" },
+      },
+      outputs: {
+        display: { type: "string", label: "Display" },
+        expression: { type: "string", label: "Expression" },
+        memoryValue: { type: "number", label: "Memory value" },
+        memoryLabel: { type: "string", label: "Memory label" },
+      },
+      run(context, inputs) {
+        const state = context.state;
+        const key = String(inputs.key ?? "");
+
+        const currentNumber = () => Number(String(state.display ?? "0"));
+        const format = (value) => {
+          if (!Number.isFinite(value)) return "Error";
+          const rounded = Number(value.toPrecision(12));
+          return Object.is(rounded, -0) ? "0" : String(rounded);
+        };
+        const calculate = (left, operator, right) => {
+          if (operator === "+") return left + right;
+          if (operator === "−" || operator === "-") return left - right;
+          if (operator === "×" || operator === "*") return left * right;
+          if (operator === "÷" || operator === "/") return right === 0 ? Number.NaN : left / right;
+          return right;
+        };
+        const resetAll = () => {
+          state.display = "0";
+          state.accumulator = null;
+          state.operator = "";
+          state.waitingForOperand = false;
+          state.expression = "";
+        };
+
+        if (/^[0-9]$/.test(key)) {
+          if (state.display === "Error" || state.waitingForOperand) {
+            state.display = key;
+            state.waitingForOperand = false;
+          } else {
+            const text = String(state.display ?? "0");
+            state.display = text === "0" ? key : text + key;
+          }
+        } else if (key === ".") {
+          if (state.display === "Error" || state.waitingForOperand) {
+            state.display = "0.";
+            state.waitingForOperand = false;
+          } else if (!String(state.display).includes(".")) {
+            state.display = String(state.display) + ".";
+          }
+        } else if (["+", "−", "×", "÷"].includes(key)) {
+          const current = currentNumber();
+          if (!Number.isFinite(current)) {
+            resetAll();
+          } else if (state.accumulator !== null && state.operator && !state.waitingForOperand) {
+            const result = calculate(Number(state.accumulator), String(state.operator), current);
+            state.display = format(result);
+            state.accumulator = result;
+          } else {
+            state.accumulator = current;
+          }
+          state.operator = key;
+          state.expression = String(state.display) + " " + key;
+          state.waitingForOperand = true;
+        } else if (key === "=") {
+          if (state.accumulator !== null && state.operator) {
+            const right = currentNumber();
+            const left = Number(state.accumulator);
+            const operator = String(state.operator);
+            const result = calculate(left, operator, right);
+            state.expression = format(left) + " " + operator + " " + format(right) + " =";
+            state.display = format(result);
+            state.accumulator = null;
+            state.operator = "";
+            state.waitingForOperand = true;
+          }
+        } else if (key === "CE") {
+          state.display = "0";
+          state.waitingForOperand = false;
+        } else if (key === "C") {
+          resetAll();
+        } else if (key === "⌫") {
+          if (!state.waitingForOperand && state.display !== "Error") {
+            const text = String(state.display ?? "0");
+            state.display = text.length <= 1 || (text.length === 2 && text.startsWith("-")) ? "0" : text.slice(0, -1);
+          }
+        } else if (key === "MC") {
+          state.memory = 0;
+        } else if (key === "MR") {
+          state.display = format(Number(state.memory ?? 0));
+          state.waitingForOperand = true;
+        } else if (key === "M+") {
+          const current = currentNumber();
+          if (Number.isFinite(current)) state.memory = Number(state.memory ?? 0) + current;
+        } else if (key === "M-") {
+          const current = currentNumber();
+          if (Number.isFinite(current)) state.memory = Number(state.memory ?? 0) - current;
+        }
+
+        const memoryValue = Number(state.memory ?? 0);
+        return {
+          display: String(state.display ?? "0"),
+          expression: String(state.expression ?? ""),
+          memoryValue,
+          memoryLabel: memoryValue === 0 ? "" : "M  " + format(memoryValue),
+        };
+      },
+    },
+  },
+});
+`;
+
+await main();
