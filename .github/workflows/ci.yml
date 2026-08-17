@@ -10,30 +10,18 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   check-test-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
       - name: Type check
-        id: typecheck
-        continue-on-error: true
-        run: deno task check > ci-typecheck.txt 2>&1
-      - name: Save diagnostics on failure
-        if: steps.typecheck.outcome == 'failure'
-        run: |
-          cat ci-typecheck.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f ci-typecheck.txt
-          git commit -m "ci: capture type-check failure"
-          git push origin HEAD:feature/studio-v0.3
-          exit 1
+        run: deno task check
       - name: Runtime tests
         run: deno task test
       - name: Build
