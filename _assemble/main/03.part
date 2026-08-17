@@ -1,0 +1,305 @@
+    for (const [name, action] of Object.entries(definition?.actions ?? {})) {
+      result.push({ endpoint: { instanceId: instance.id, name }, definition: action });
+    }
+  }
+  return result;
+}
+
+function getDefinitionForInstance(instanceId: string): ObjectDefinition | undefined {
+  const instance = project?.manifest.instances.find((item) => item.id === instanceId);
+  return instance ? definitions.get(instance.objectFile) : undefined;
+}
+
+function getEventDefinition(endpoint: EventEndpoint): ObjectEventDefinition | undefined {
+  return getDefinitionForInstance(endpoint.instanceId)?.events?.[endpoint.name];
+}
+
+function getActionDefinition(endpoint: EventEndpoint): ObjectActionDefinition | undefined {
+  return getDefinitionForInstance(endpoint.instanceId)?.actions?.[endpoint.name];
+}
+
+function createActionStep(endpoint: EventEndpoint): ActionStep {
+  const action = getActionDefinition(endpoint);
+  const inputs: Record<string, ValueBinding> = {};
+  for (const [name, port] of Object.entries(action?.inputs ?? {})) inputs[name] = defaultBinding(port);
+  const outputs = Object.fromEntries(Object.keys(action?.outputs ?? {}).map((name) => [name, {}]));
+  return { id: crypto.randomUUID(), action: endpoint, inputs, outputs };
+}
+
+function defaultBinding(port: PortDefinition): ValueBinding {
+  return { kind: "literal", value: port.default ?? defaultValueForType(port.type) };
+}
+
+function bindingForKind(kind: ValueBinding["kind"], port: PortDefinition, rule: EventRule, step: ActionStep): ValueBinding {
+  if (kind === "literal") return defaultBinding(port);
+  if (kind === "blackboard") return { kind, key: matchingBlackboardKeys(port.type)[0] ?? "" };
+  if (kind === "state") {
+    const first = stateBindingOptions(port.type)[0];
+    return { kind, instanceId: first?.instanceId ?? "", path: first?.path ?? "" };
+  }
+  if (kind === "event") {
+    const outputs = Object.entries(getEventDefinition(rule.event)?.outputs ?? {}).filter(([, def]) => portTypesCompatible(port.type, def.type));
+    return { kind, path: outputs[0]?.[0] ?? "" };
+  }
+  const first = previousOutputOptions(rule, step, port.type)[0];
+  return { kind: "output", stepId: first?.stepId ?? "", name: first?.name ?? "" };
+}
+
+function matchingBlackboardKeys(type: PortType): string[] {
+  if (!project) return [];
+  return Object.entries(project.manifest.blackboard)
+    .filter(([, entry]) => portTypesCompatible(type, entry.type))
+    .map(([key]) => key);
+}
+
+function stateBindingOptions(type: PortType): Array<{ instanceId: string; path: string }> {
+  if (!project) return [];
+  const result: Array<{ instanceId: string; path: string }> = [];
+  for (const instance of project.manifest.instances) {
+    const state = definitions.get(instance.objectFile)?.state ?? {};
+    for (const [path, value] of Object.entries(state)) {
+      if (portTypesCompatible(type, typeOfValue(value))) result.push({ instanceId: instance.id, path });
+    }
+  }
+  return result;
+}
+
+function previousOutputOptions(rule: EventRule, step: ActionStep, type: PortType): Array<{ stepId: string; name: string; label: string }> {
+  const index = rule.actions.findIndex((item) => item.id === step.id);
+  const result: Array<{ stepId: string; name: string; label: string }> = [];
+  for (const previous of rule.actions.slice(0, Math.max(0, index))) {
+    const action = getActionDefinition(previous.action);
+    for (const [name, port] of Object.entries(action?.outputs ?? {})) {
+      if (!portTypesCompatible(type, port.type)) continue;
+      result.push({ stepId: previous.id, name, label: `${previous.action.instanceId}.${previous.action.name} → ${name}` });
+    }
+  }
+  return result;
+}
+
+function inputForPort(port: Pick<PortDefinition, "type">, value: unknown): HTMLInputElement | HTMLSelectElement {
+  if (port.type === "boolean") {
+    const select = document.createElement("select");
+    select.append(option("true", "true"), option("false", "false"));
+    select.value = String(Boolean(value));
+    return select;
+  }
+  const input = document.createElement("input");
+  input.type = port.type === "number" ? "number" : "text";
+  input.value = value === undefined || value === null ? "" : String(value);
+  if (port.type === "number") input.step = "any";
+  return input;
+}
+
+function readPortInput(input: HTMLInputElement | HTMLSelectElement, type: PortType): unknown {
+  if (type === "number") return Number(input.value || 0);
+  if (type === "boolean") return input.value === "true";
+  return input.value;
+}
+
+function portTypesCompatible(target: PortType, source: PortType): boolean {
+  return target === "any" || source === "any" || target === source;
+}
+
+function typeOfValue(value: unknown): PortType {
+  if (typeof value === "number") return "number";
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "string") return "string";
+  return "any";
+}
+
+function defaultValueForType(type: PortType): unknown {
+  if (type === "number") return 0;
+  if (type === "boolean") return false;
+  return "";
+}
+
+function coerceValue(value: unknown, type: PortType): unknown {
+  if (type === "number") return Number(value || 0);
+  if (type === "boolean") return Boolean(value);
+  if (type === "string") return String(value ?? "");
+  return value;
+}
+
+interface DiagramNode {
+  id: string;
+  type: "event" | "action" | "blackboard";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  title: string;
+  subtitle: string;
+  inputs: string[];
+  outputs: string[];
+}
+
+interface DiagramEdge {
+  from: string;
+  to: string;
+  kind: "flow" | "data" | "blackboard";
+  label?: string;
+}
+
+function setupLogicViews(): void {
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>(".logic-view-tab"));
+  const apply = () => {
+    buttons.forEach((button) => button.classList.toggle("is-active", button.dataset.logicView === logicView));
+    eventEditorView.classList.toggle("is-active", logicView === "events");
+    diagramEditorView.classList.toggle("is-active", logicView === "diagram");
+    ruleCreate.hidden = logicView !== "events";
+    diagramTools.hidden = logicView !== "diagram";
+    if (logicView === "diagram") requestAnimationFrame(renderDiagram);
+  };
+  for (const button of buttons) {
+    button.addEventListener("click", () => {
+      logicView = button.dataset.logicView === "diagram" ? "diagram" : "events";
+      apply();
+    });
+  }
+  apply();
+}
+
+function renderDiagram(): void {
+  diagramHost.replaceChildren();
+  if (!project) return;
+  if (!project.manifest.rules.length) {
+    diagramHost.append(emptyMessage("No connections to visualize yet."));
+    return;
+  }
+
+  const nodes: DiagramNode[] = [];
+  const edges: DiagramEdge[] = [];
+  const boardNodeIds = new Map<string, string>();
+  let maxX = 0;
+  let maxY = 0;
+
+  project.manifest.rules.forEach((rule, ruleIndex) => {
+    const rowY = 36 + ruleIndex * 230;
+    const eventDefinition = getEventDefinition(rule.event);
+    const eventId = `event:${rule.id}`;
+    nodes.push({
+      id: eventId,
+      type: "event",
+      x: 32,
+      y: rowY,
+      width: 230,
+      height: 92,
+      title: `${rule.event.instanceId}.${rule.event.name}`,
+      subtitle: eventDefinition?.label ?? "Event",
+      inputs: [],
+      outputs: Object.keys(eventDefinition?.outputs ?? {}),
+    });
+
+    let previousNodeId = eventId;
+    rule.actions.forEach((step, stepIndex) => {
+      const action = getActionDefinition(step.action);
+      const nodeId = `action:${step.id}`;
+      const x = 330 + stepIndex * 310;
+      const portRows = Math.max(Object.keys(action?.inputs ?? {}).length, Object.keys(action?.outputs ?? {}).length, 1);
+      const height = 86 + Math.min(portRows, 5) * 20;
+      nodes.push({
+        id: nodeId,
+        type: "action",
+        x,
+        y: rowY,
+        width: 250,
+        height,
+        title: `${step.action.instanceId}.${step.action.name}`,
+        subtitle: action?.label ?? "Action",
+        inputs: Object.keys(action?.inputs ?? {}),
+        outputs: Object.keys(action?.outputs ?? {}),
+      });
+      edges.push({ from: previousNodeId, to: nodeId, kind: "flow" });
+      previousNodeId = nodeId;
+
+      for (const [inputName, binding] of Object.entries(step.inputs)) {
+        if (binding.kind === "event") {
+          edges.push({ from: eventId, to: nodeId, kind: "data", label: binding.path ? `${binding.path} → ${inputName}` : inputName });
+        }
+        if (binding.kind === "output") {
+          edges.push({ from: `action:${binding.stepId}`, to: nodeId, kind: "data", label: `${binding.name} → ${inputName}` });
+        }
+      }
+
+      for (const [outputName, mapping] of Object.entries(step.outputs)) {
+        if (!mapping.blackboardKey) continue;
+        let boardId = boardNodeIds.get(mapping.blackboardKey);
+        if (!boardId) {
+          boardId = `board:${mapping.blackboardKey}`;
+          boardNodeIds.set(mapping.blackboardKey, boardId);
+          const boardIndex = boardNodeIds.size - 1;
+          const boardX = 330 + Math.max(rule.actions.length, 1) * 310;
+          nodes.push({
+            id: boardId,
+            type: "blackboard",
+            x: boardX,
+            y: rowY + boardIndex * 78,
+            width: 205,
+            height: 66,
+            title: mapping.blackboardKey,
+            subtitle: project?.manifest.blackboard[mapping.blackboardKey]?.type ?? "blackboard",
+            inputs: ["value"],
+            outputs: [],
+          });
+        }
+        edges.push({ from: nodeId, to: boardId, kind: "blackboard", label: outputName });
+      }
+    });
+  });
+
+  for (const node of nodes) {
+    maxX = Math.max(maxX, node.x + node.width);
+    maxY = Math.max(maxY, node.y + node.height);
+  }
+
+  const world = document.createElement("div");
+  world.className = "diagram-world";
+  world.style.width = `${Math.max(maxX + 80, diagramHost.clientWidth - 10)}px`;
+  world.style.height = `${Math.max(maxY + 70, diagramHost.clientHeight - 10)}px`;
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("diagram-edges");
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", "100%");
+  svg.innerHTML = `
+    <defs>
+      <marker id="arrow-flow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" /></marker>
+      <marker id="arrow-data" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" /></marker>
+      <marker id="arrow-board" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" /></marker>
+    </defs>`;
+  world.append(svg);
+
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  for (const edge of edges) {
+    const from = byId.get(edge.from);
+    const to = byId.get(edge.to);
+    if (!from || !to) continue;
+    const x1 = from.x + from.width;
+    const y1 = from.y + from.height / 2;
+    const x2 = to.x;
+    const y2 = to.y + to.height / 2;
+    const bend = Math.max(42, Math.abs(x2 - x1) * 0.42);
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`);
+    path.setAttribute("class", `diagram-edge ${edge.kind}`);
+    path.setAttribute("marker-end", `url(#arrow-${edge.kind === "blackboard" ? "board" : edge.kind})`);
+    svg.append(path);
+
+    if (edge.label && edge.kind !== "flow") {
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("x", String((x1 + x2) / 2));
+      label.setAttribute("y", String((y1 + y2) / 2 - 6));
+      label.setAttribute("class", `diagram-edge-label ${edge.kind}`);
+      label.textContent = edge.label;
+      svg.append(label);
+    }
+  }
+
+  for (const node of nodes) {
+    const element = document.createElement("article");
+    element.className = `diagram-node ${node.type}`;
+    element.style.left = `${node.x}px`;
+    element.style.top = `${node.y}px`;
+    element.style.width = `${node.width}px`;
+    element.style.minHeight = `${node.height}px`;
