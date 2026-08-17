@@ -3,6 +3,7 @@ import { CodeEditor } from "./code-editor.ts";
 import { evaluateObjectFile } from "./compiler.ts";
 import type {
   ActionStep,
+  ActionTemplateSummary,
   BlackboardEntry,
   EventEndpoint,
   EventRule,
@@ -26,9 +27,13 @@ const projectManagerDialog = required<HTMLDialogElement>("#project-manager");
 const closeProjectManagerButton = required<HTMLButtonElement>("#close-project-manager");
 const dialogNewProjectButton = required<HTMLButtonElement>("#dialog-new-project");
 const projectGrid = required<HTMLElement>("#project-grid");
+const actionLibraryDialog = required<HTMLDialogElement>("#action-library-dialog");
+const closeActionLibraryButton = required<HTMLButtonElement>("#close-action-library");
+const actionLibraryGrid = required<HTMLElement>("#action-library-grid");
 const objectList = required<HTMLElement>("#object-list");
 const objectFilter = required<HTMLInputElement>("#object-filter");
 const addObjectButton = required<HTMLButtonElement>("#add-object");
+const addLibraryActionButton = required<HTMLButtonElement>("#add-library-action");
 const addFolderButton = required<HTMLButtonElement>("#add-folder");
 const blackboardList = required<HTMLElement>("#blackboard-list");
 const addBlackboardButton = required<HTMLButtonElement>("#add-blackboard");
@@ -69,6 +74,7 @@ let dirty = false;
 let runtime: EventRuntime | null = null;
 let definitions = new Map<string, ObjectDefinition>();
 let projectSummaries: ProjectSummary[] = [];
+let actionTemplates: ActionTemplateSummary[] | null = null;
 let traceRows: RuntimeTrace[] = [];
 let liveBlackboard: Record<string, BlackboardEntry> | null = null;
 let selectedFolder = "";
@@ -101,6 +107,11 @@ projectManagerDialog.addEventListener("click", (event) => {
   if (event.target === projectManagerDialog) projectManagerDialog.close();
 });
 addObjectButton.addEventListener("click", () => void addObject());
+addLibraryActionButton.addEventListener("click", () => void openActionLibrary());
+closeActionLibraryButton.addEventListener("click", () => actionLibraryDialog.close());
+actionLibraryDialog.addEventListener("click", (event) => {
+  if (event.target === actionLibraryDialog) actionLibraryDialog.close();
+});
 addFolderButton.addEventListener("click", () => void addObjectFolder());
 revealObjectButton.addEventListener("click", () => void revealSelectedObject());
 moveObjectButton.addEventListener("click", () => void moveSelectedObject());
@@ -846,6 +857,60 @@ async function createProject(): Promise<void> {
   try {
     const created = await api.createProject(name);
     await refreshProjects(created.manifest.id);
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  }
+}
+
+
+async function openActionLibrary(): Promise<void> {
+  if (!project) return;
+  try {
+    actionTemplates ??= await api.listActionTemplates();
+    renderActionLibrary();
+    actionLibraryDialog.showModal();
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  }
+}
+
+function renderActionLibrary(): void {
+  actionLibraryGrid.replaceChildren();
+  for (const template of actionTemplates ?? []) {
+    const card = document.createElement("article");
+    card.className = "project-card";
+    card.innerHTML = `
+      <span class="project-card-icon">⚡</span>
+      <span class="project-card-copy">
+        <strong>${escapeHtml(template.name)}</strong>
+        <small>${escapeHtml(template.description)}</small>
+        <em>${escapeHtml(template.category)} · ${escapeHtml(template.defaultFile)}</em>
+      </span>
+      <span class="project-card-actions"></span>
+    `;
+    const actions = card.querySelector<HTMLElement>(".project-card-actions");
+    const add = document.createElement("button");
+    add.className = "project-card-open";
+    add.textContent = "Add →";
+    add.addEventListener("click", () => void addReadyAction(template));
+    actions?.append(add);
+    actionLibraryGrid.append(card);
+  }
+  if (!actionLibraryGrid.children.length) actionLibraryGrid.append(emptyMessage("No ready actions are installed."));
+}
+
+async function addReadyAction(template: ActionTemplateSummary): Promise<void> {
+  if (!project) return;
+  try {
+    const updated = await api.addActionTemplate(project.manifest.id, template.id, selectedFolder);
+    project = updated;
+    definitions = compileDefinitions(updated.objects);
+    selectedFile = updated.manifest.objects.at(-1) ?? null;
+    if (selectedFile) selectedFolder = objectParentFolder(selectedFile);
+    dirty = false;
+    actionLibraryDialog.close();
+    renderAll();
+    setGlobalStatus(`${template.name} added`);
   } catch (error) {
     setGlobalStatus(errorMessage(error), true);
   }

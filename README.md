@@ -139,3 +139,10 @@ deno task start
 ## Current boundary
 
 This is still an early application-builder foundation. Conditions, object/instance property overrides, object rename/delete, undo/redo across project operations, a full TypeScript language service, editable node-graph wiring, and sandboxing of untrusted object code remain future work.
+
+
+## Modular building blocks
+
+Projects can compose visual objects instead of growing one large UI object. A parent mount may return named `slots`; child instances select a parent instance and slot, and reusable component files receive per-instance `props`. The modular calculator demonstrates this with one reusable key component instantiated for every key and separate command files for arithmetic, editing, and memory behavior.
+
+The Objects panel also includes an **Action Library** (⚡) for inserting ready-made typed actions such as Add, Divide, Clamp, Round, Concat, Equals, and Set Value.

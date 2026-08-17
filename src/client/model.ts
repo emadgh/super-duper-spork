@@ -15,6 +15,7 @@ export interface ObjectEventDefinition {
 
 export interface ActionContext<State extends Record<string, unknown> = Record<string, unknown>> {
   state: State;
+  props: Readonly<Record<string, unknown>>;
   payload: unknown;
   emit: (eventName: string, payload?: unknown) => void;
 }
@@ -30,12 +31,15 @@ export interface ObjectActionDefinition {
 export interface MountContext<State extends Record<string, unknown> = Record<string, unknown>> {
   host: HTMLElement;
   state: State;
+  props: Readonly<Record<string, unknown>>;
   emit: (eventName: string, payload?: unknown) => void;
 }
 
 export interface MountedObject {
   update?: () => void;
   dispose?: () => void;
+  /** Named DOM mount points that can host child component instances. */
+  slots?: Record<string, HTMLElement>;
 }
 
 export interface ObjectDefinition {
@@ -57,6 +61,13 @@ export interface ProjectObjectFile {
 export interface ProjectInstance {
   id: string;
   objectFile: string;
+  /** Per-instance configuration. A reusable component file can therefore back many component instances. */
+  props?: Record<string, unknown>;
+  /** Optional visual parent. Child components mount into a named slot exposed by the parent. */
+  parent?: {
+    instanceId: string;
+    slot: string;
+  };
 }
 
 export interface EventEndpoint {
@@ -110,4 +121,12 @@ export interface ProjectSummary {
   id: string;
   name: string;
   updatedAt: string;
+}
+
+export interface ActionTemplateSummary {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  defaultFile: string;
 }
