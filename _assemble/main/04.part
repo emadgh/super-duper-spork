@@ -1,0 +1,239 @@
+    element.innerHTML = `
+      <header><span>${node.type.toUpperCase()}</span><small>${escapeHtml(node.subtitle)}</small></header>
+      <strong>${escapeHtml(node.title)}</strong>
+      <div class="diagram-node-ports">
+        <div>${node.inputs.map((port) => `<span class="diagram-port input">● ${escapeHtml(port)}</span>`).join("")}</div>
+        <div>${node.outputs.map((port) => `<span class="diagram-port output">${escapeHtml(port)} ●</span>`).join("")}</div>
+      </div>
+    `;
+    world.append(element);
+  }
+
+  diagramHost.append(world);
+}
+
+function setupNavigatorViews(): void {
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>(".activity-button"));
+  const views = Array.from(document.querySelectorAll<HTMLElement>(".navigator-view"));
+  for (const button of buttons) {
+    button.addEventListener("click", () => {
+      buttons.forEach((item) => item.classList.toggle("is-active", item === button));
+      views.forEach((view) => view.classList.toggle("is-active", view.id === `${button.dataset.view}-view`));
+    });
+  }
+}
+
+function setupSplitters(): void {
+  restoreSplitterLayout();
+
+  bindSplitter(required("#split-nav"), "x", (delta) => {
+    const current = numberCssVariable("--nav-width", 252);
+    document.documentElement.style.setProperty("--nav-width", `${clamp(current + delta, 180, 430)}px`);
+  }, saveSplitterLayout);
+  bindSplitter(required("#split-preview"), "x", (delta) => {
+    const current = numberCssVariable("--preview-width", 326);
+    document.documentElement.style.setProperty("--preview-width", `${clamp(current - delta, 240, 520)}px`);
+  }, saveSplitterLayout);
+  bindSplitter(required("#split-logic"), "y", (delta) => {
+    const current = numberCssVariable("--logic-height", 330);
+    const max = Math.max(220, appShell.clientHeight - 220);
+    document.documentElement.style.setProperty("--logic-height", `${clamp(current - delta, 180, max)}px`);
+  }, saveSplitterLayout);
+}
+
+function bindSplitter(
+  element: HTMLElement,
+  axis: "x" | "y",
+  applyDelta: (delta: number) => void,
+  onStop?: () => void,
+): void {
+  element.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    element.setPointerCapture(event.pointerId);
+    let previous = axis === "x" ? event.clientX : event.clientY;
+    document.body.classList.add("is-resizing");
+    document.body.classList.toggle("is-row-resizing", axis === "y");
+
+    const move = (moveEvent: PointerEvent) => {
+      const current = axis === "x" ? moveEvent.clientX : moveEvent.clientY;
+      const delta = current - previous;
+      previous = current;
+      applyDelta(delta);
+    };
+    const stop = () => {
+      document.body.classList.remove("is-resizing", "is-row-resizing");
+      onStop?.();
+      element.removeEventListener("pointermove", move);
+      element.removeEventListener("pointerup", stop);
+      element.removeEventListener("pointercancel", stop);
+    };
+    element.addEventListener("pointermove", move);
+    element.addEventListener("pointerup", stop);
+    element.addEventListener("pointercancel", stop);
+  });
+}
+
+function saveSplitterLayout(): void {
+  const layout = {
+    nav: numberCssVariable("--nav-width", 252),
+    preview: numberCssVariable("--preview-width", 326),
+    logic: numberCssVariable("--logic-height", 330),
+  };
+  localStorage.setItem("sds.layout", JSON.stringify(layout));
+}
+
+function restoreSplitterLayout(): void {
+  try {
+    const raw = localStorage.getItem("sds.layout");
+    if (!raw) return;
+    const layout = JSON.parse(raw) as Partial<{ nav: number; preview: number; logic: number }>;
+    if (Number.isFinite(layout.nav)) document.documentElement.style.setProperty("--nav-width", `${clamp(Number(layout.nav), 180, 430)}px`);
+    if (Number.isFinite(layout.preview)) document.documentElement.style.setProperty("--preview-width", `${clamp(Number(layout.preview), 240, 520)}px`);
+    if (Number.isFinite(layout.logic)) document.documentElement.style.setProperty("--logic-height", `${clamp(Number(layout.logic), 180, 620)}px`);
+  } catch {
+    localStorage.removeItem("sds.layout");
+  }
+}
+
+function renderProjectMeta(): void {
+  if (!project) {
+    projectMeta.textContent = "No project";
+    return;
+  }
+  const { instances, rules, blackboard } = project.manifest;
+  projectMeta.textContent = `${instances.length} objects · ${rules.length} rules · ${Object.keys(blackboard).length} blackboard vars`;
+}
+
+function clearWorkspace(): void {
+  project = null;
+  selectedFile = null;
+  definitions.clear();
+  renderAll();
+}
+
+function apiGroup(label: string, values: string[], kind?: string): HTMLElement {
+  const group = document.createElement("div");
+  group.className = "api-group";
+  const title = document.createElement("span");
+  title.className = "api-label";
+  title.textContent = label;
+  group.append(title);
+  if (!values.length) {
+    const none = document.createElement("span");
+    none.className = "api-chip";
+    none.textContent = "none";
+    group.append(none);
+  } else {
+    for (const value of values) {
+      const chip = document.createElement("span");
+      chip.className = `api-chip${kind ? ` ${kind}` : ""}`;
+      chip.textContent = value;
+      group.append(chip);
+    }
+  }
+  return group;
+}
+
+function fillEndpointSelect(select: HTMLSelectElement, items: Array<{ value: string; label: string }>, emptyLabel: string): void {
+  const previous = select.value;
+  select.replaceChildren();
+  if (!items.length) {
+    const empty = option("", emptyLabel);
+    empty.disabled = true;
+    select.append(empty);
+    return;
+  }
+  for (const item of items) select.append(option(item.value, item.label));
+  if (items.some((item) => item.value === previous)) select.value = previous;
+}
+
+function option(value: string, label: string): HTMLOptionElement {
+  const item = document.createElement("option");
+  item.value = value;
+  item.textContent = label;
+  return item;
+}
+
+function endpointValue(endpoint: EventEndpoint): string {
+  return `${endpoint.instanceId}::${endpoint.name}`;
+}
+
+function parseEndpointValue(value: string): EventEndpoint {
+  const [instanceId, name] = value.split("::");
+  return { instanceId, name };
+}
+
+function emptyMessage(text: string): HTMLElement {
+  const element = document.createElement("div");
+  element.className = "empty-message";
+  element.textContent = text;
+  return element;
+}
+
+function emptyInline(text: string): HTMLElement {
+  const element = document.createElement("span");
+  element.className = "empty-inline";
+  element.textContent = text;
+  return element;
+}
+
+function objectParentFolder(path: string): string {
+  const normalized = path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const index = normalized.lastIndexOf("/");
+  return index < 0 ? "" : normalized.slice(0, index);
+}
+
+function basenameWithoutExtension(path: string): string {
+  return (path.split("/").at(-1) ?? path).replace(/\.ts$/, "");
+}
+
+function safeVariableName(value: string): string {
+  return value.trim().replace(/[^A-Za-z0-9_]/g, "_").replace(/^\d+/, "").slice(0, 48);
+}
+
+function formatPrimitive(value: unknown): string {
+  if (typeof value === "number" && Number.isNaN(value)) return "NaN";
+  if (typeof value === "string") return value || '\"\"';
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value === null) return "null";
+  if (value === undefined) return "undefined";
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function setGlobalStatus(message: string, error = false): void {
+  globalStatus.textContent = message;
+  globalStatus.classList.toggle("is-error", error);
+}
+
+function numberCssVariable(name: string, fallback: number): number {
+  const value = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name));
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function required<T extends Element = HTMLElement>(selector: string): T {
+  const element = document.querySelector<T>(selector);
+  if (!element) throw new Error(`Missing element: ${selector}`);
+  return element;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>'\"]/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#39;",
+    '\"': "&quot;",
+  }[char] ?? char));
+}
