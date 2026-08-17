@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Super Duper Spork Studio</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="titlebar">
+    <div class="brand-mark">S</div>
+    <div class="brand-copy">
+      <strong>Super Duper Spork</strong>
+      <span>Visual Application Builder</span>
+    </div>
+
+    <div class="project-switcher">
+      <span class="toolbar-label">Project</span>
+      <select id="project-select" aria-label="Project"></select>
+      <button id="open-project-manager" class="toolbar-button project-manager-button" title="Browse projects">Projects</button>
+      <button id="reveal-project" class="tool-button" title="Reveal project folder">⌂</button>
+      <button id="new-project" class="tool-button" title="Create project">＋</button>
+    </div>
+
+    <div class="titlebar-spacer"></div>
+    <span id="global-status" class="status-pill">Ready</span>
+    <button id="reset" class="toolbar-button">Reset</button>
+    <button id="run" class="toolbar-button run-button"><span class="play-icon">▶</span> Run</button>
+  </header>
+
+  <main id="app-shell" class="app-shell">
+    <nav class="activity-bar" aria-label="Workspace">
+      <button class="activity-button is-active" data-view="objects" title="Objects">
+        <span class="activity-glyph">◇</span><small>Objects</small>
+      </button>
+      <button class="activity-button" data-view="blackboard" title="Blackboard">
+        <span class="activity-glyph">▦</span><small>Board</small>
+      </button>
+    </nav>
+
+    <aside class="navigator panel-flat">
+      <section id="objects-view" class="navigator-view is-active">
+        <div class="section-titlebar">
+          <div>
+            <span class="eyebrow">PROJECT</span>
+            <h2>Objects</h2>
+          </div>
+          <div class="section-actions">
+            <button id="add-folder" class="icon-button" title="New object folder">▱</button>
+            <button id="add-object" class="icon-button" title="New object">＋</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <input id="object-filter" class="text-input compact-input" placeholder="Filter objects…" />
+        </div>
+        <div id="object-list" class="object-list object-tree"></div>
+        <div class="navigator-footer">Folders and object files are managed by the project. Select a folder before creating an object to place it there.</div>
+      </section>
+
+      <section id="blackboard-view" class="navigator-view">
+        <div class="section-titlebar">
+          <div>
+            <span class="eyebrow">PROJECT DATA</span>
+            <h2>Blackboard</h2>
+          </div>
+          <button id="add-blackboard" class="icon-button" title="New variable">＋</button>
+        </div>
+        <div class="blackboard-header">
+          <span>Name</span><span>Type</span><span>Default</span><span>Runtime</span><span></span>
+        </div>
+        <div id="blackboard-list" class="blackboard-list"></div>
+        <div class="navigator-footer">Blackboard values belong to the project and can be bound to action inputs or action outputs.</div>
+      </section>
+    </aside>
+
+    <div id="split-nav" class="splitter splitter-vertical" aria-hidden="true"></div>
+
+    <section class="center-workspace">
+      <section class="code-panel panel-flat">
+        <div class="editor-tabs">
+          <div id="editor-tab" class="editor-tab is-active">
+            <span class="ts-badge">TS</span>
+            <span id="filename">No object selected</span>
+            <span id="dirty-dot" class="dirty-dot"></span>
+          </div>
+          <div class="editor-tab-spacer"></div>
+          <span id="editor-status" class="editor-status">Saved</span>
+          <button id="reveal-object" class="toolbar-button small" title="Reveal object file in folder">Reveal</button>
+          <button id="move-object" class="toolbar-button small" title="Move selected object to a folder">Move</button>
+          <button id="save-object" class="toolbar-button small">Save <kbd>Ctrl S</kbd></button>
+        </div>
+        <div id="editor-host" class="editor-host"></div>
+        <div id="api-summary" class="api-summary"></div>
+      </section>
+
+      <div id="split-logic" class="splitter splitter-horizontal" aria-hidden="true"></div>
+
+      <section class="logic-panel panel-flat">
+        <div class="logic-titlebar">
+          <div class="logic-heading">
+            <span class="eyebrow">EVENT LOGIC</span>
+            <div class="logic-heading-row">
+              <h2>Connections</h2>
+              <div class="logic-view-tabs" role="tablist">
+                <button class="logic-view-tab is-active" data-logic-view="events">Event Editor</button>
+                <button class="logic-view-tab" data-logic-view="diagram">Diagram</button>
+              </div>
+            </div>
+          </div>
+          <div id="rule-create" class="rule-create">
+            <select id="event-select" aria-label="Event"></select>
+            <span class="flow-arrow">→</span>
+            <select id="action-select" aria-label="Action"></select>
+            <button id="connect" class="toolbar-button accent">Add Rule</button>
+          </div>
+          <div id="diagram-tools" class="diagram-tools" hidden>
+            <span class="diagram-legend"><i class="event"></i>Event <i class="action"></i>Action <i class="board"></i>Blackboard</span>
+            <button id="diagram-refresh" class="toolbar-button small">Refresh</button>
+          </div>
+        </div>
+
+        <div id="event-editor-view" class="logic-workspace-view is-active">
+          <div id="rule-list" class="rule-list"></div>
+        </div>
+        <div id="diagram-editor-view" class="logic-workspace-view">
+          <div id="diagram" class="diagram-canvas"></div>
+        </div>
+      </section>
+    </section>
+
+    <div id="split-preview" class="splitter splitter-vertical" aria-hidden="true"></div>
+
+    <aside class="preview-panel panel-flat">
+      <div class="preview-titlebar">
+        <div>
+          <span class="eyebrow">RUNTIME</span>
+          <h2>Preview</h2>
+        </div>
+        <span class="live-dot"><i></i> local</span>
+      </div>
+      <div id="preview" class="preview"></div>
+      <div class="trace-section">
+        <div class="trace-title"><span>Execution trace</span><button id="clear-trace" class="text-button">Clear</button></div>
+        <div id="trace-list" class="trace-list"><div class="empty-inline">Run the project to inspect events and actions.</div></div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span>TypeScript</span>
+    <span>Deno + TypeScript</span>
+    <span class="statusbar-spacer"></span>
+    <span id="project-meta">No project</span>
+  </footer>
+
+  <dialog id="project-manager" class="project-dialog">
+    <div class="project-dialog-shell">
+      <div class="project-dialog-head">
+        <div>
+          <span class="eyebrow">WORKSPACE</span>
+          <h2>Project Manager</h2>
+          <p>Switch between application projects. Files stay managed by the studio.</p>
+        </div>
+        <button id="close-project-manager" class="icon-button" aria-label="Close project manager">×</button>
+      </div>
+      <div class="project-dialog-toolbar">
+        <strong>Projects</strong>
+        <button id="dialog-new-project" class="toolbar-button accent">＋ New Project</button>
+      </div>
+      <div id="project-grid" class="project-grid"></div>
+    </div>
+  </dialog>
+
+  <script type="module" src="/client/main.js"></script>
+</body>
+</html>
