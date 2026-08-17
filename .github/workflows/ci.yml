@@ -1,0 +1,28 @@
+name: Studio CI
+
+on:
+  push:
+    branches:
+      - main
+      - feature/studio-v0.3
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  check-test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type check
+        run: deno task check
+      - name: Runtime tests
+        run: deno task test
+      - name: Build
+        run: deno task build
