@@ -1,0 +1,12 @@
+{
+  "tasks": {
+    "dev": "deno run --allow-net --allow-read --allow-write --allow-run src/server.ts",
+    "check": "deno check src/server.ts scripts/build.ts tests/runtime.test.ts && deno check --config deno.client.json src/client/main.ts",
+    "build": "deno task check && deno run --allow-read --allow-write scripts/build.ts",
+    "start": "deno run --allow-net --allow-read --allow-write --allow-run src/server.ts --dist",
+    "test": "deno test tests"
+  },
+  "compilerOptions": {
+    "strict": true
+  }
+}
