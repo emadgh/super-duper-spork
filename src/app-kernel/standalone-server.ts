@@ -1,6 +1,6 @@
 import type { AppHostContext, AppHostModule } from "./host-api.ts";
 
-const ROOT = new URL("../../", import.meta.url);
+const ROOT = new URL("../", import.meta.url);
 const PUBLIC = new URL("public/", ROOT);
 const DATA = new URL("data/", ROOT);
 const HOST = new URL("host/main.ts", ROOT);
@@ -52,7 +52,7 @@ async function loadHostModule(): Promise<AppHostModule | null> {
 }
 
 async function serveStatic(pathname: string): Promise<Response> {
-  let relative = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
+  const relative = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
   if (!relative || relative.includes("..") || relative.includes("\\")) return new Response("Invalid path", { status: 400 });
   const target = new URL(relative, PUBLIC);
   try {
