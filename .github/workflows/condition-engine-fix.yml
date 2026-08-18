@@ -1,0 +1,47 @@
+name: Condition Engine Fix
+
+on:
+  push:
+    branches:
+      - feature/condition-engine
+    paths:
+      - .github/workflows/condition-engine-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/condition-engine
+          fetch-depth: 0
+      - name: Narrow condition binding type
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("src/client/main.ts")
+          source = path.read_text(encoding="utf-8")
+          old = '''  let binding = step.inputs[name] ?? defaultBinding(port);
+            if (binding.kind === "output") binding = defaultBinding(port);
+            step.inputs[name] = binding;'''.replace("            ", "")
+          new = '''  const currentBinding = step.inputs[name];
+            let binding: Exclude<ValueBinding, { kind: "output" }> = currentBinding && currentBinding.kind !== "output"
+              ? currentBinding
+              : { kind: "literal", value: port.default ?? defaultValueForType(port.type) };
+            step.inputs[name] = binding;'''.replace("            ", "")
+          if old not in source:
+              raise SystemExit("condition binding fragment not found")
+          path.write_text(source.replace(old, new, 1), encoding="utf-8")
+      - name: Commit fix and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/condition-engine-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix condition input binding narrowing"
+          git push origin HEAD:feature/condition-engine
