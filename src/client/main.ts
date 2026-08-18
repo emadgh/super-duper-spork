@@ -78,6 +78,7 @@ let project: LoadedProject | null = null;
 let selectedFile: string | null = null;
 let dirty = false;
 let runtime: EventRuntime | null = null;
+let previewFrame: HTMLIFrameElement | null = null;
 let definitions = new Map<string, ObjectDefinition>();
 let projectSummaries: ProjectSummary[] = [];
 let actionTemplates: ActionTemplateSummary[] | null = null;
@@ -137,6 +138,7 @@ clearTraceButton.addEventListener("click", () => {
 window.addEventListener("message", (event) => {
   const message = event.data as { source?: string; version?: number; type?: string; projectId?: string; trace?: RuntimeTrace; blackboard?: Record<string, BlackboardEntry>; message?: string };
   if (message?.source !== "spork-app" || message.version !== 1 || !project || message.projectId !== project.manifest.id) return;
+  if (previewFrame?.contentWindow && event.source !== previewFrame.contentWindow) return;
   if (message.type === "trace" && message.trace) appendTrace(message.trace);
   else if (message.type === "blackboard" && message.blackboard) {
     liveBlackboard = message.blackboard;
@@ -937,14 +939,25 @@ async function runProject(): Promise<void> {
   renderTrace();
   renderBlackboard();
 
-  const iframe = document.createElement("iframe");
-  iframe.className = "app-preview-frame";
-  iframe.title = `${project.manifest.name} preview`;
-  iframe.sandbox.add("allow-scripts", "allow-forms", "allow-modals", "allow-popups");
-  iframe.src = `/apps/${encodeURIComponent(project.manifest.id)}/?v=${Date.now()}`;
-  previewHost.replaceChildren(iframe);
-  previewPanel.classList.add("is-running");
-  setGlobalStatus("Runtime starting in isolated iframe…");
+  try {
+    runButton.disabled = true;
+    setGlobalStatus("Building and starting isolated application host…");
+    const launched = await api.runProject(project.manifest.id);
+    const iframe = document.createElement("iframe");
+    iframe.className = "app-preview-frame";
+    iframe.title = `${project.manifest.name} preview`;
+    iframe.sandbox.add("allow-scripts", "allow-same-origin", "allow-forms", "allow-modals", "allow-popups");
+    iframe.src = `${launched.url}?studio=${Date.now()}`;
+    previewFrame = iframe;
+    previewHost.replaceChildren(iframe);
+    previewPanel.classList.add("is-running");
+    setGlobalStatus(`Application host running on port ${launched.port}`);
+  } catch (error) {
+    previewFrame = null;
+    setGlobalStatus(errorMessage(error), true);
+  } finally {
+    runButton.disabled = false;
+  }
 }
 
 async function buildProject(): Promise<void> {

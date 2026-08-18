@@ -61,6 +61,9 @@ const TEMPLATES_DIR = new URL("templates/", ROOT);
 const BUILDS_DIR = new URL("workspace/builds/", ROOT);
 const DIST_MODE = Deno.args.includes("--dist");
 const PORT = 8000;
+const APP_PORT_START = 9100;
+let nextAppPort = APP_PORT_START;
+const appProcesses = new Map<string, { child: Deno.ChildProcess; port: number; url: string }>();
 
 async function main(): Promise<void> {
   await ensureWorkspace();
@@ -125,6 +128,11 @@ async function handleApi(request: Request, url: URL): Promise<Response> {
         await writeManifest(next);
         return json(await loadProject(projectId));
       }
+    }
+
+    if (parts.length === 4 && parts[3] === "run" && request.method === "POST") {
+      const result = await runStandaloneProject(projectId);
+      return json(result);
     }
 
     if (parts.length === 4 && parts[3] === "build" && request.method === "POST") {
@@ -238,6 +246,82 @@ async function handleApi(request: Request, url: URL): Promise<Response> {
   }
 
   return json({ error: "Not found." }, 404);
+}
+
+async function runStandaloneProject(projectId: string): Promise<{ ok: true; projectId: string; url: string; port: number }> {
+  await stopStandaloneProject(projectId);
+  const project = await loadProject(projectId);
+  const outputRoot = new URL(`${projectId}/`, BUILDS_DIR);
+  await buildStandaloneApp({ projectId, projectRoot: projectUrl(projectId), outputRoot, project });
+
+  const install = new Deno.Command(Deno.execPath(), {
+    cwd: outputRoot,
+    args: ["install", "--config", "deno.json"],
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const installResult = await install.output();
+  if (!installResult.success) {
+    const decoder = new TextDecoder();
+    throw new Error(`Project package install failed.
+${decoder.decode(installResult.stdout)}
+${decoder.decode(installResult.stderr)}`);
+  }
+
+  const port = reserveAppPort();
+  const child = new Deno.Command(Deno.execPath(), {
+    cwd: outputRoot,
+    args: ["task", "--config", "deno.json", "start", "--port", String(port)],
+    stdout: "inherit",
+    stderr: "inherit",
+  }).spawn();
+  const url = `http://127.0.0.1:${port}/`;
+  appProcesses.set(projectId, { child, port, url });
+
+  try {
+    await waitForApp(url, child);
+  } catch (error) {
+    appProcesses.delete(projectId);
+    try { child.kill("SIGTERM"); } catch { /* already stopped */ }
+    throw error;
+  }
+  return { ok: true, projectId, url, port };
+}
+
+async function stopStandaloneProject(projectId: string): Promise<void> {
+  const existing = appProcesses.get(projectId);
+  if (!existing) return;
+  appProcesses.delete(projectId);
+  try { existing.child.kill("SIGTERM"); } catch { /* already stopped */ }
+  await Promise.race([
+    existing.child.status.catch(() => ({ success: false, code: -1, signal: null })),
+    new Promise((resolve) => setTimeout(resolve, 750)),
+  ]);
+}
+
+function reserveAppPort(): number {
+  const port = nextAppPort;
+  nextAppPort++;
+  if (nextAppPort > 9900) nextAppPort = APP_PORT_START;
+  return port;
+}
+
+async function waitForApp(url: string, child: Deno.ChildProcess): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const status = child.status;
+    const winner = await Promise.race([
+      status.then((value) => ({ type: "status" as const, value })),
+      fetch(url, { signal: AbortSignal.timeout(400) })
+        .then((response) => ({ type: "response" as const, response }))
+        .catch((error) => ({ type: "error" as const, error })),
+    ]);
+    if (winner.type === "response" && winner.response.ok) return;
+    if (winner.type === "status") throw new Error(`Application process exited before becoming ready (code ${winner.value.code}).`);
+    if (winner.type === "error") lastError = winner.error;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Application did not become ready in time${lastError ? `: ${errorMessage(lastError)}` : "."}`);
 }
 
 async function serveProjectApp(pathname: string): Promise<Response> {

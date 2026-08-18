@@ -19,9 +19,17 @@ const KERNEL_SOURCE = new URL("../app-kernel/", import.meta.url);
 
 export async function buildStandaloneApp(options: StandaloneBuildOptions): Promise<StandaloneBuildResult> {
   const { projectId, projectRoot, outputRoot, project } = options;
-  await Deno.remove(outputRoot, { recursive: true }).catch((error) => {
-    if (!(error instanceof Deno.errors.NotFound)) throw error;
-  });
+  await Deno.mkdir(outputRoot, { recursive: true });
+  for (const relative of ["public/", "kernel/", "host/"]) {
+    await Deno.remove(new URL(relative, outputRoot), { recursive: true }).catch((error) => {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    });
+  }
+  for (const relative of ["deno.json", "packages.json", "run.bat", "README.txt"]) {
+    await Deno.remove(new URL(relative, outputRoot)).catch((error) => {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    });
+  }
   await Deno.mkdir(new URL("public/client/", outputRoot), { recursive: true });
   await Deno.mkdir(new URL("public/app-kernel/", outputRoot), { recursive: true });
   await Deno.mkdir(new URL("kernel/", outputRoot), { recursive: true });
