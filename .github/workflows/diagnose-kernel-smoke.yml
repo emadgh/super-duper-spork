@@ -1,0 +1,132 @@
+name: Diagnose kernel smoke failure
+
+on:
+  push:
+    branches:
+      - feature/app-runtime-kernel
+    paths:
+      - ".github/workflows/diagnose-kernel-smoke.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/app-runtime-kernel
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Run numbered smoke diagnostics
+        run: |
+          mkdir -p .ci
+          report=.ci/kernel-smoke-report.txt
+          : > "$report"
+          exec 3>&1
+          log() { echo "$*" | tee -a "$report" >&3; }
+          run_step() {
+            name="$1"; shift
+            log "=== $name ==="
+            set +e
+            "$@" >> "$report" 2>&1
+            status=$?
+            set -e
+            log "STATUS=$status"
+            return 0
+          }
+
+          run_step "01 check" deno task check
+          run_step "02 tests" deno task test
+          run_step "03 build" deno task build
+
+          log "=== 04 start studio ==="
+          deno task dev > /tmp/studio-smoke.log 2>&1 &
+          studio_pid=$!
+          echo "STUDIO_PID=$studio_pid" >> "$report"
+          ready=0
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8000/api/projects > /tmp/projects.json 2>> "$report"; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$studio_pid" 2>/dev/null; then
+              log "Studio process exited while waiting"
+              break
+            fi
+            sleep 0.25
+          done
+          log "STATUS=$((1-ready)) READY=$ready"
+
+          if [ "$ready" -eq 1 ]; then
+            run_step "05 calculator data" curl -fsS http://127.0.0.1:8000/api/projects/calculator-modular-demo -o /tmp/calculator.json
+            run_step "06 studio app shell" curl -fsS http://127.0.0.1:8000/apps/calculator-modular-demo/ -o /tmp/app-shell.html
+            run_step "07 studio app data" curl -fsS http://127.0.0.1:8000/apps/calculator-modular-demo/app-data.json -o /tmp/app-data.json
+            log "=== 08 app kernel GET headers ==="
+            set +e
+            curl -fsS -D /tmp/kernel-headers.txt -o /tmp/kernel-browser.js http://127.0.0.1:8000/app-kernel/browser.js >> "$report" 2>&1
+            st=$?
+            set -e
+            cat /tmp/kernel-headers.txt >> "$report" 2>/dev/null || true
+            log "STATUS=$st"
+
+            run_step "09 build API" curl -fsS -X POST -H 'content-type: application/json' -d '{}' http://127.0.0.1:8000/api/projects/calculator-modular-demo/build -o /tmp/build.json
+            log "BUILD_RESPONSE=$(cat /tmp/build.json 2>/dev/null || true)"
+            for path in \
+              workspace/builds/calculator-modular-demo/public/index.html \
+              workspace/builds/calculator-modular-demo/public/app-kernel/browser.js \
+              workspace/builds/calculator-modular-demo/kernel/standalone-server.ts \
+              workspace/builds/calculator-modular-demo/deno.json; do
+              if [ -f "$path" ]; then log "FILE_OK $path"; else log "FILE_MISSING $path"; fi
+            done
+
+            log "=== 10 run API ==="
+            set +e
+            curl -sS -D /tmp/run-headers.txt -X POST -H 'content-type: application/json' -d '{}' http://127.0.0.1:8000/api/projects/calculator-modular-demo/run -o /tmp/run.json >> "$report" 2>&1
+            run_status=$?
+            set -e
+            cat /tmp/run-headers.txt >> "$report" 2>/dev/null || true
+            log "CURL_STATUS=$run_status RESPONSE=$(cat /tmp/run.json 2>/dev/null || true)"
+
+            log "=== 11 independent host probe ==="
+            python3 - <<'PY' >> "$report" 2>&1
+          import json, time, urllib.request, urllib.error
+          try:
+              run = json.load(open('/tmp/run.json'))
+              print('RUN_JSON', run)
+              url = run.get('url')
+              print('URL', url)
+              if not url:
+                  raise RuntimeError('run response has no url')
+              for i in range(20):
+                  try:
+                      with urllib.request.urlopen(url, timeout=2) as r:
+                          body = r.read().decode()
+                      print('ROOT_STATUS=OK', len(body), '/app-kernel/browser.js' in body)
+                      with urllib.request.urlopen(url + 'app-data.json', timeout=2) as r:
+                          data = r.read().decode()
+                      print('DATA_STATUS=OK', len(data), 'calculator-modular-demo' in data)
+                      break
+                  except Exception as e:
+                      print('PROBE_RETRY', i, repr(e))
+                      time.sleep(.2)
+              else:
+                  print('PROBE_STATUS=FAILED')
+          except Exception as e:
+              print('PROBE_SETUP_ERROR', repr(e))
+          PY
+          fi
+
+          log "=== STUDIO LOG ==="
+          cat /tmp/studio-smoke.log >> "$report" 2>/dev/null || true
+          kill "$studio_pid" 2>/dev/null || true
+          cat "$report"
+      - name: Commit diagnostic report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .ci/kernel-smoke-report.txt
+          git commit -m "ci(kernel): capture standalone smoke diagnostics (#7)" || exit 0
+          git push origin HEAD:feature/app-runtime-kernel
