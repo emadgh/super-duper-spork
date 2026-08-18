@@ -54,9 +54,20 @@ jobs:
           grep -F '"file":"UI/CalculatorKey.tsx"' /tmp/calculator.json
           grep -F '"file":"calculator.css"' /tmp/calculator.json
           grep -F '.calculator-shell' /tmp/calculator.json
+          grep -F '"packages":{"manifest":{"version":1' /tmp/calculator.json
           curl -fsS http://127.0.0.1:8000/api/action-library > /tmp/actions.json
           grep -F '"id":"math.add"' /tmp/actions.json
           grep -F '"id":"math.divide"' /tmp/actions.json
+          curl -fsS http://127.0.0.1:8000/api/package-library > /tmp/packages.json
+          grep -F '"id":"typeorm"' /tmp/packages.json
+          grep -F '"id":"better-sqlite3"' /tmp/packages.json
+          grep -F '"id":"tailwind"' /tmp/packages.json
+          curl -fsS -X POST -H 'content-type: application/json' \
+            -d '{"presetId":"better-sqlite3"}' \
+            http://127.0.0.1:8000/api/projects/calculator-modular-demo/packages/presets > /tmp/calculator-sqlite.json
+          grep -F 'npm:better-sqlite3@13.0.2' /tmp/calculator-sqlite.json
+          grep -F '"ffi":true' /tmp/calculator-sqlite.json
+          grep -F '"nodeModulesDir":"auto"' /tmp/calculator-sqlite.json
       - name: Package distributable
         run: |
           rm -rf artifacts package
