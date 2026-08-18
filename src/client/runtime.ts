@@ -1,3 +1,4 @@
+import { mountDom } from "./dom-core/index.ts";
 import type {
   ActionStep,
   BlackboardEntry,
@@ -67,7 +68,7 @@ export class EventRuntime {
     const mountInstance = (instance: ProjectInstance, target: HTMLElement, embedded: boolean): void => {
       if (mounted.has(instance.id)) return;
       const runtimeInstance = this.#runtimeInstances.get(instance.id);
-      if (!runtimeInstance || !runtimeInstance.definition.mount) return;
+      if (!runtimeInstance || !isVisualDefinition(runtimeInstance.definition)) return;
       mounted.add(instance.id);
 
       let host: HTMLElement;
@@ -91,13 +92,25 @@ export class EventRuntime {
         target.append(card);
       }
 
-      const mountedObject = runtimeInstance.definition.mount({
-        host,
+      const baseContext = {
         state: runtimeInstance.state,
         props: runtimeInstance.props,
-        emit: (eventName, payload) => this.emit(instance.id, eventName, payload),
-      });
-      runtimeInstance.mount = mountedObject || undefined;
+        emit: (eventName: string, payload?: unknown) => this.emit(instance.id, eventName, payload),
+      };
+
+      if (runtimeInstance.definition.render) {
+        const domMount = mountDom(host, () => runtimeInstance.definition.render?.(baseContext));
+        runtimeInstance.mount = {
+          update: () => domMount.update(),
+          dispose: () => domMount.dispose(),
+          get slots() {
+            return domMount.slots;
+          },
+        };
+      } else if (runtimeInstance.definition.mount) {
+        const mountedObject = runtimeInstance.definition.mount({ host, ...baseContext });
+        runtimeInstance.mount = mountedObject || undefined;
+      }
 
       const children = this.#instances.filter((candidate) => candidate.parent?.instanceId === instance.id);
       for (const child of children) {
@@ -117,7 +130,7 @@ export class EventRuntime {
     for (const instance of this.#instances) {
       if (mounted.has(instance.id)) continue;
       const runtimeInstance = this.#runtimeInstances.get(instance.id);
-      if (!runtimeInstance?.definition.mount) continue;
+      if (!runtimeInstance || !isVisualDefinition(runtimeInstance.definition)) continue;
       this.#trace("error", `${instance.id}.mount`, "Component parent could not be resolved; mounted as a root object.");
       mountInstance({ ...instance, parent: undefined }, root, false);
     }
@@ -214,6 +227,10 @@ export class EventRuntime {
   #trace(kind: RuntimeTrace["kind"], label: string, detail?: string): void {
     this.#options.onTrace?.({ kind, label, detail });
   }
+}
+
+function isVisualDefinition(definition: ObjectDefinition): boolean {
+  return typeof definition.render === "function" || typeof definition.mount === "function";
 }
 
 function getPath(source: unknown, path: string): unknown {
