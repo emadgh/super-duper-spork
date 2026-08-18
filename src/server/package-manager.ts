@@ -6,6 +6,8 @@ export interface ProjectPermissions {
   write?: string[];
   net?: string[];
   env?: string[];
+  /** Explicit capability for dependencies that enumerate process.env and cannot use a key allowlist. */
+  envAll?: boolean;
   run?: string[];
   sys?: string[];
   ffi?: boolean;
@@ -46,7 +48,7 @@ export const PACKAGE_PRESETS: readonly PackagePreset[] = [
         alias: "typeorm",
         specifier: "npm:typeorm@1.1.0",
         role: "runtime",
-        permissions: { env: ["TINYGLOBBY_DEBUG"] },
+        permissions: { envAll: true },
       },
       { id: "reflect-metadata", alias: "reflect-metadata", specifier: "npm:reflect-metadata@0.2.2", role: "runtime" },
     ],
@@ -235,6 +237,7 @@ function sanitizePermissions(value: unknown): ProjectPermissions {
       result[key] = unique(raw[key]!.filter((entry): entry is string => typeof entry === "string" && entry.length <= 240));
     }
   }
+  if (raw.envAll === true) result.envAll = true;
   if (raw.ffi === true) result.ffi = true;
   return result;
 }
@@ -243,6 +246,7 @@ function mergePermissions(target: ProjectPermissions, source: ProjectPermissions
   for (const key of ["read", "write", "net", "env", "run", "sys"] as const) {
     if (source[key]?.length) target[key] = unique([...(target[key] ?? []), ...source[key]!]);
   }
+  if (source.envAll) target.envAll = true;
   if (source.ffi) target.ffi = true;
 }
 
@@ -251,6 +255,7 @@ function normalizePermissions(value: ProjectPermissions): ProjectPermissions {
   for (const key of ["read", "write", "net", "env", "run", "sys"] as const) {
     if (value[key]?.length) result[key] = unique(value[key]!);
   }
+  if (value.envAll) result.envAll = true;
   if (value.ffi) result.ffi = true;
   return result;
 }
