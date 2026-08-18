@@ -456,3 +456,24 @@ body.is-resizing.is-row-resizing { cursor: row-resize; }
   .logic-view-tab { padding: 0 6px; }
   .diagram-legend { display: none; }
 }
+
+
+/* Project package manager */
+.package-permissions { margin: 8px 10px 10px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); display: grid; gap: 4px; }
+.package-permissions strong { font-size: 11px; color: var(--text); }
+.package-permissions small { color: var(--muted); line-height: 1.4; }
+.package-list, .package-preset-list { display: grid; gap: 6px; padding: 0 8px 8px; }
+.package-row { position: relative; display: grid; gap: 4px; padding: 9px 58px 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.package-row > div { display: grid; gap: 2px; min-width: 0; }
+.package-row strong { font-size: 12px; }
+.package-row code { overflow: hidden; color: var(--accent); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.package-row small { color: var(--muted); font-size: 10px; }
+.package-row > button { position: absolute; inset-inline-end: 8px; inset-block-start: 10px; }
+.package-library-title { margin-top: 6px; }
+.package-library-title h3 { margin: 1px 0 0; font-size: 13px; }
+.package-preset { display: grid; gap: 3px; width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); text-align: start; cursor: pointer; }
+.package-preset:hover:not(:disabled) { border-color: var(--accent); background: var(--surface-2); }
+.package-preset small { color: var(--muted); line-height: 1.35; }
+.package-preset code { color: var(--accent); font-size: 10px; }
+.package-preset.is-installed { opacity: .55; cursor: default; }
+.danger-text { color: #e67d8d; }

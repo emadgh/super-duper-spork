@@ -1,5 +1,6 @@
 import ts from "npm:typescript@5.9.2";
 import { defaultStyleCompiler } from "./server/style-pipeline.ts";
+import { packagePresetSummaries, ProjectPackageManager, sanitizePackageManifest } from "./server/package-manager.ts";
 
 type PortType = "number" | "string" | "boolean" | "any";
 
@@ -87,6 +88,10 @@ async function handleApi(request: Request, url: URL): Promise<Response> {
     return json(listReadyActionTemplates());
   }
 
+  if (parts.length === 2 && parts[0] === "api" && parts[1] === "package-library" && request.method === "GET") {
+    return json(packagePresetSummaries());
+  }
+
   if (parts.length === 2 && parts[0] === "api" && parts[1] === "projects") {
     if (request.method === "GET") {
       return json(await listProjects());
@@ -139,6 +144,31 @@ async function handleApi(request: Request, url: URL): Promise<Response> {
       if (!name) return json({ error: "Folder name is required." }, 400);
       await addObjectFolder(projectId, name, body.parent ?? "");
       return json(await loadProject(projectId), 201);
+    }
+
+    if (parts.length === 5 && parts[3] === "packages" && parts[4] === "presets" && request.method === "POST") {
+      const body = await readJson<{ presetId?: string }>(request);
+      const presetId = body.presetId?.trim();
+      if (!presetId) return json({ error: "Package preset id is required." }, 400);
+      const manager = new ProjectPackageManager(projectUrl(projectId));
+      await manager.addPreset(presetId);
+      return json(await loadProject(projectId));
+    }
+
+    if (parts.length === 5 && parts[3] === "packages" && parts[4] === "install" && request.method === "POST") {
+      const manager = new ProjectPackageManager(projectUrl(projectId));
+      const result = await manager.install();
+      const manifest = await manager.read();
+      return json({
+        packages: { manifest, effectivePermissions: manager.effectivePermissions(manifest) },
+        output: result.output,
+      });
+    }
+
+    if (parts.length === 5 && parts[3] === "packages" && request.method === "DELETE") {
+      const manager = new ProjectPackageManager(projectUrl(projectId));
+      await manager.remove(parts[4]);
+      return json(await loadProject(projectId));
     }
 
     if (parts.length === 4 && parts[3] === "action-library" && request.method === "POST") {
@@ -505,6 +535,14 @@ async function ensureProjectTemplate(projectId: string, name: string, templateNa
     await Deno.writeTextFile(target, source);
   }
   await writeManifest(manifest);
+  const packageManager = new ProjectPackageManager(projectUrl(projectId));
+  try {
+    const rawPackages = JSON.parse(await Deno.readTextFile(new URL("packages.json", templateRoot)));
+    await packageManager.write(sanitizePackageManifest(rawPackages));
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) throw error;
+    await packageManager.ensure();
+  }
 }
 
 async function projectExists(projectId: string): Promise<boolean> {
@@ -556,6 +594,7 @@ async function createProject(name: string): Promise<ProjectManifest> {
     updatedAt: new Date().toISOString(),
   };
   await writeManifest(manifest);
+  await new ProjectPackageManager(dir).ensure();
   return manifest;
 }
 
@@ -648,6 +687,7 @@ async function loadProject(projectId: string): Promise<{
   manifest: ProjectManifest;
   objects: Array<{ file: string; source: string; compiled: string }>;
   styles: Array<{ file: string; source: string; compiled: string; warnings: string[] }>;
+  packages: { manifest: ReturnType<typeof sanitizePackageManifest>; effectivePermissions: ReturnType<ProjectPackageManager["effectivePermissions"]> };
 }> {
   const manifest = await readManifest(projectId);
   const objects = [];
@@ -662,7 +702,14 @@ async function loadProject(projectId: string): Promise<{
     const result = defaultStyleCompiler.compile(source, file);
     styles.push({ file, source, compiled: result.css, warnings: result.warnings });
   }
-  return { manifest, objects, styles };
+  const packageManager = new ProjectPackageManager(projectUrl(projectId));
+  const packageManifest = await packageManager.read();
+  return {
+    manifest,
+    objects,
+    styles,
+    packages: { manifest: packageManifest, effectivePermissions: packageManager.effectivePermissions(packageManifest) },
+  };
 }
 
 function transpileObject(source: string, file: string): { output: string; errors: string[] } {
