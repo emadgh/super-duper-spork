@@ -32,19 +32,14 @@ jobs:
 
           expression = Path("src/client/expression.ts")
           source = expression.read_text(encoding="utf-8")
-          old = '''    case "!==": return left !== right;
-          case "&&":
+          unreachable = '''    case "&&":
           case "||":
           case "??": throw new Error(`Internal expression evaluator error for ${node.operator}.`);
-          }
-          }'''.replace("          ", "")
-          new = '''    case "!==": return left !== right;
-          }
-          throw new Error("Unsupported expression operator.");
-          }'''.replace("          ", "")
-          if old not in source:
-              raise SystemExit("expression evaluator fragment not found")
-          expression.write_text(source.replace(old, new, 1), encoding="utf-8")
+          '''.replace("          ", "")
+          if unreachable not in source:
+              raise SystemExit("expression evaluator logical cases not found")
+          source = source.replace(unreachable, "", 1)
+          expression.write_text(source, encoding="utf-8")
 
           ci = Path(".github/workflows/ci.yml")
           workflow = ci.read_text(encoding="utf-8")
