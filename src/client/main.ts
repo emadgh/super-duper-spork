@@ -1,6 +1,7 @@
 import { api } from "./api.ts";
 import { CodeEditor } from "./code-editor.ts";
 import { evaluateObjectFile } from "./compiler.ts";
+import { validateExpression } from "./expression.ts";
 import type {
   ActionStep,
   ActionTemplateSummary,
@@ -710,6 +711,7 @@ function renderConditionInputPort(rule: EventRule, step: ConditionStep, name: st
   const kind = document.createElement("select");
   const kinds: Array<{ value: Exclude<ValueBinding["kind"], "output">; label: string }> = [
     { value: "literal", label: "Value" },
+    { value: "expression", label: "Expression" },
     { value: "blackboard", label: "Blackboard" },
     { value: "state", label: "Object state" },
     { value: "event", label: "Event output" },
@@ -756,6 +758,11 @@ function renderConditionBindingValueEditor(
     const input = inputForPort(port, binding.value);
     input.addEventListener("change", () => onChange({ kind: "literal", value: readPortInput(input, port.type) }));
     host.append(input);
+    return;
+  }
+
+  if (binding.kind === "expression") {
+    host.append(expressionInput(binding.source, (source) => onChange({ kind: "expression", source })));
     return;
   }
 
@@ -835,6 +842,7 @@ function renderInputPort(rule: EventRule, step: ActionStep, name: string, port: 
   const kind = document.createElement("select");
   const kinds: Array<{ value: ValueBinding["kind"]; label: string }> = [
     { value: "literal", label: "Value" },
+    { value: "expression", label: "Expression" },
     { value: "blackboard", label: "Blackboard" },
     { value: "state", label: "Object state" },
     { value: "event", label: "Event output" },
@@ -882,6 +890,11 @@ function renderBindingValueEditor(
     const input = inputForPort(port, binding.value);
     input.addEventListener("change", () => onChange({ kind: "literal", value: readPortInput(input, port.type) }));
     host.append(input);
+    return;
+  }
+
+  if (binding.kind === "expression") {
+    host.append(expressionInput(binding.source, (source) => onChange({ kind: "expression", source })));
     return;
   }
 
@@ -1171,7 +1184,6 @@ async function createProject(): Promise<void> {
   }
 }
 
-
 async function openActionLibrary(): Promise<void> {
   if (!project) return;
   try {
@@ -1382,6 +1394,7 @@ function defaultBinding(port: PortDefinition): ValueBinding {
 
 function bindingForKind(kind: ValueBinding["kind"], port: PortDefinition, rule: EventRule, step: ActionStep): ValueBinding {
   if (kind === "literal") return defaultBinding(port);
+  if (kind === "expression") return { kind, source: "0" };
   if (kind === "blackboard") return { kind, key: matchingBlackboardKeys(port.type)[0] ?? "" };
   if (kind === "state") {
     const first = stateBindingOptions(port.type)[0];
@@ -1401,6 +1414,7 @@ function bindingForConditionKind(
   rule: EventRule,
 ): Exclude<ValueBinding, { kind: "output" }> {
   if (kind === "literal") return defaultBinding(port) as Exclude<ValueBinding, { kind: "output" }>;
+  if (kind === "expression") return { kind, source: "0" };
   if (kind === "blackboard") return { kind, key: matchingBlackboardKeys(port.type)[0] ?? "" };
   if (kind === "state") {
     const first = stateBindingOptions(port.type)[0];
@@ -1460,6 +1474,25 @@ function readPortInput(input: HTMLInputElement | HTMLSelectElement, type: PortTy
   if (type === "number") return Number(input.value || 0);
   if (type === "boolean") return input.value === "true";
   return input.value;
+}
+
+function expressionInput(source: string, onChange: (source: string) => void): HTMLInputElement {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "expression-input";
+  input.value = source;
+  input.placeholder = "@event.value + @board.Step * 2";
+  const validate = () => {
+    const result = validateExpression(input.value);
+    input.classList.toggle("is-invalid", !result.ok);
+    input.title = result.ok
+      ? "Safe expression · @event · @board · @state · @output"
+      : result.error ?? "Invalid expression";
+  };
+  input.addEventListener("input", validate);
+  input.addEventListener("change", () => onChange(input.value));
+  validate();
+  return input;
 }
 
 function portTypesCompatible(target: PortType, source: PortType): boolean {
