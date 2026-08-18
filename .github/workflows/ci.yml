@@ -60,7 +60,7 @@ jobs:
           grep -F '"id":"better-sqlite3"' /tmp/packages.json
           grep -F '"id":"tailwind"' /tmp/packages.json
 
-          # Condition steps must survive Studio manifest save/load without changing v3.
+          # Condition and expression bindings must survive Studio save/load without changing v3.
           python3 - <<'PY'
           import copy, json
           from urllib.request import Request, urlopen
@@ -78,6 +78,7 @@ jobs:
               },
               'inputs': {
                   'value': {'kind': 'literal', 'value': 7},
+                  'computed': {'kind': 'expression', 'source': '@event.value + @board.Step * 2'},
               },
           }]
 
@@ -97,6 +98,7 @@ jobs:
           assert condition['id'] == 'ci-condition-persistence'
           assert condition['condition']['name'] == 'ciProbe'
           assert condition['inputs']['value'] == {'kind': 'literal', 'value': 7}
+          assert condition['inputs']['computed'] == {'kind': 'expression', 'source': '@event.value + @board.Step * 2'}
           with urlopen('http://127.0.0.1:8000/api/projects/calculator-modular-demo', timeout=10) as response:
               reloaded = json.loads(response.read().decode())
           assert reloaded['manifest']['rules'][0]['conditions'][0] == condition
@@ -114,6 +116,7 @@ jobs:
           body = urlopen(run['url'], timeout=8).read().decode()
           assert '/app-kernel/browser.js' in body
           PY
+          test -f workspace/builds/calculator-modular-demo/public/client/expression.js
 
           # Phone Book template + package policy.
           grep -F "Phone Book · SQLite Demo" /tmp/projects.json

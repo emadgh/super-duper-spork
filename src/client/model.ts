@@ -114,7 +114,8 @@ export type ValueBinding =
   | { kind: "blackboard"; key: string }
   | { kind: "state"; instanceId: string; path: string }
   | { kind: "event"; path: string }
-  | { kind: "output"; stepId: string; name: string };
+  | { kind: "output"; stepId: string; name: string }
+  | { kind: "expression"; source: string };
 
 export interface ConditionStep {
   id: string;

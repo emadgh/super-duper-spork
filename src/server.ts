@@ -3,6 +3,7 @@ import { defaultStyleCompiler } from "./server/style-pipeline.ts";
 import { packagePresetSummaries, ProjectPackageManager, sanitizePackageManifest } from "./server/package-manager.ts";
 import { buildStandaloneApp } from "./server/app-builder.ts";
 import { runBuildProviders } from "./server/build-providers.ts";
+import { EXPRESSION_SOURCE_LIMIT } from "./client/expression.ts";
 
 type PortType = "number" | "string" | "boolean" | "any";
 
@@ -28,7 +29,8 @@ type ValueBinding =
   | { kind: "blackboard"; key: string }
   | { kind: "state"; instanceId: string; path: string }
   | { kind: "event"; path: string }
-  | { kind: "output"; stepId: string; name: string };
+  | { kind: "output"; stepId: string; name: string }
+  | { kind: "expression"; source: string };
 
 interface ConditionStep {
   id: string;
@@ -602,7 +604,6 @@ async function ensureRealCalculatorDemo(): Promise<void> {
   await writeManifest(manifest);
 }
 
-
 interface ReadyActionTemplate {
   id: string;
   name: string;
@@ -1056,6 +1057,12 @@ function sanitizeBindings(value: unknown): Record<string, ValueBinding> {
     if (binding.kind === "event" && typeof binding.path === "string") result[key] = { kind: "event", path: binding.path };
     if (binding.kind === "output" && typeof binding.stepId === "string" && typeof binding.name === "string") {
       result[key] = { kind: "output", stepId: binding.stepId, name: binding.name };
+    }
+    if (
+      binding.kind === "expression" && typeof binding.source === "string" &&
+      binding.source.trim().length > 0 && binding.source.length <= EXPRESSION_SOURCE_LIMIT
+    ) {
+      result[key] = { kind: "expression", source: binding.source };
     }
   }
   return result;
@@ -1566,7 +1573,6 @@ const RESULT_DISPLAY_SOURCE = `export default defineObject({
   },
 });
 `;
-
 
 const REAL_CALCULATOR_SHELL_SOURCE = `export default defineObject({
   name: "CalculatorShell",
