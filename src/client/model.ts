@@ -134,10 +134,53 @@ export interface ProjectManifest {
   updatedAt: string;
 }
 
+export type ProjectPackageRole = "runtime" | "build" | "dev";
+export type ProjectNodeModulesMode = "none" | "auto" | "manual";
+
+export interface ProjectPackagePermissions {
+  read?: string[];
+  write?: string[];
+  net?: string[];
+  env?: string[];
+  run?: string[];
+  sys?: string[];
+  ffi?: boolean;
+}
+
+export interface ProjectPackageDefinition {
+  id: string;
+  alias: string;
+  specifier: string;
+  role: ProjectPackageRole;
+  native?: boolean;
+  allowScripts?: string[];
+  permissions?: ProjectPackagePermissions;
+}
+
+export interface ProjectPackageManifest {
+  version: 1;
+  nodeModulesDir: ProjectNodeModulesMode;
+  packages: ProjectPackageDefinition[];
+}
+
+export interface PackagePresetSummary {
+  id: string;
+  name: string;
+  description: string;
+  nodeModulesDir?: ProjectNodeModulesMode;
+  packageIds: string[];
+}
+
+export interface ProjectPackageState {
+  manifest: ProjectPackageManifest;
+  effectivePermissions: ProjectPackagePermissions;
+}
+
 export interface LoadedProject {
   manifest: ProjectManifest;
   objects: ProjectObjectFile[];
   styles: ProjectStyleFile[];
+  packages: ProjectPackageState;
 }
 
 export interface ProjectSummary {
