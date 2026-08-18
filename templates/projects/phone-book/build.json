@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "styles": [
+    {
+      "provider": "tailwind",
+      "input": "build/tailwind.css",
+      "output": "public/tailwind.css",
+      "minify": true
+    }
+  ]
+}
