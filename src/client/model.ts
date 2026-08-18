@@ -67,6 +67,8 @@ export interface MountedObject {
 export interface ObjectDefinition {
   name: string;
   description?: string;
+  /** Typed editor-facing configuration. Defaults are merged with per-instance overrides at runtime. */
+  properties?: Record<string, PortDefinition>;
   state?: Record<string, unknown>;
   events?: Record<string, ObjectEventDefinition>;
   conditions?: Record<string, ObjectConditionDefinition>;
