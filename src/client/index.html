@@ -59,7 +59,15 @@
           <input id="object-filter" class="text-input compact-input" placeholder="Filter objects…" />
         </div>
         <div id="object-list" class="object-list object-tree"></div>
-        <div class="navigator-footer">Folders and object files are managed by the project. Select a folder before creating an object to place it there.</div>
+        <section class="instance-panel">
+          <div class="instance-titlebar">
+            <div><span class="eyebrow">SELECTED TYPE</span><strong>Instances</strong></div>
+            <button id="add-instance" class="icon-button" title="Create another instance">＋</button>
+          </div>
+          <div id="instance-list" class="instance-list"></div>
+          <div id="instance-properties" class="instance-properties"></div>
+        </section>
+        <div class="navigator-footer">Object files define reusable types. Instances own independent runtime state and per-instance property values.</div>
       </section>
 
       <section id="blackboard-view" class="navigator-view">

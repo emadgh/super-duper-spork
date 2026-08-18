@@ -491,3 +491,23 @@ body.is-resizing.is-row-resizing { cursor: row-resize; }
 .danger-text { color: #e67d8d; }
 
 .app-preview-frame { width: 100%; height: 100%; min-height: 320px; border: 0; background: #11141b; border-radius: 8px; }
+
+
+/* Instance Manager */
+.instance-panel { flex: 0 0 auto; max-height: 46%; min-height: 118px; display: flex; flex-direction: column; border-top: 1px solid var(--line); background: #181b22; }
+.instance-titlebar { min-height: 39px; padding: 6px 8px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line-soft); }
+.instance-titlebar strong { display: block; margin-top: 2px; font-size: 10px; }
+.instance-list { max-height: 118px; overflow: auto; padding: 5px; border-bottom: 1px solid var(--line-soft); }
+.instance-row { min-height: 34px; display: grid; grid-template-columns: minmax(0,1fr) 24px; gap: 4px; align-items: center; border: 1px solid transparent; border-radius: 5px; }
+.instance-row:hover { background: #20242c; }
+.instance-row.is-selected { border-color: rgba(123,97,255,.38); background: var(--accent-soft); }
+.instance-select { min-width: 0; padding: 5px 7px; border: 0; background: transparent; color: var(--text); text-align: left; }
+.instance-select strong, .instance-select small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.instance-select strong { font: 10px ui-monospace, monospace; }
+.instance-select small { margin-top: 2px; color: var(--muted); font-size: 8px; }
+.instance-properties { min-height: 0; overflow: auto; padding: 6px; }
+.instance-properties-title { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 5px; color: #929baa; font-size: 8px; text-transform: uppercase; letter-spacing: .05em; }
+.instance-properties-title strong { color: #c5ccd7; font: 9px ui-monospace, monospace; text-transform: none; letter-spacing: 0; }
+.instance-property-row { display: grid; grid-template-columns: 82px minmax(0,1fr); gap: 5px; align-items: center; min-height: 31px; }
+.instance-property-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #a2abb8; font-size: 9px; }
+.instance-property-row input, .instance-property-row select { width: 100%; min-width: 0; min-height: 26px; padding: 0 6px; border: 1px solid #353b48; border-radius: 4px; background: #11151b; color: var(--text); font-size: 9px; }

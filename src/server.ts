@@ -938,6 +938,8 @@ function sanitizeLoadedManifest(manifest: Omit<Partial<ProjectManifest>, "versio
   const explicitFolders = Array.isArray(manifest.objectFolders)
     ? manifest.objectFolders.filter((value): value is string => typeof value === "string").map(validateObjectFolder).filter(Boolean)
     : [];
+  const instances = sanitizeInstances(manifest.instances, new Set(objects));
+  const validInstances = new Set(instances.map((item) => item.id));
   return {
     version: 3,
     id,
@@ -945,11 +947,9 @@ function sanitizeLoadedManifest(manifest: Omit<Partial<ProjectManifest>, "versio
     objects,
     objectFolders: normalizeFolders(explicitFolders, objects),
     styles: Array.isArray(manifest.styles) ? manifest.styles.filter((value): value is string => typeof value === "string").map(validateStylePath) : [],
-    instances: Array.isArray(manifest.instances)
-      ? manifest.instances.filter(isInstance).map(sanitizeProjectInstance)
-      : [],
+    instances,
     blackboard: sanitizeBlackboard(manifest.blackboard),
-    rules: sanitizeRules(manifest.rules),
+    rules: sanitizeRules(manifest.rules).filter((rule) => ruleUsesOnlyInstances(rule, validInstances)),
     updatedAt: typeof manifest.updatedAt === "string" ? manifest.updatedAt : new Date().toISOString(),
   };
 }
@@ -965,14 +965,11 @@ async function writeManifest(manifest: ProjectManifest): Promise<void> {
 
 function sanitizeManifest(input: ProjectManifest, current: ProjectManifest): ProjectManifest {
   const validObjects = new Set(current.objects);
-  const validInstances = new Set(current.instances.map((item) => item.id));
+  const instances = sanitizeInstances(input.instances, validObjects);
+  const validInstances = new Set(instances.map((item) => item.id));
 
   const blackboard = sanitizeBlackboard(input.blackboard);
-  const rules = sanitizeRules(input.rules).filter((rule) => {
-    if (!validInstances.has(rule.event.instanceId)) return false;
-    if (!(rule.conditions ?? []).every((step) => validInstances.has(step.condition.instanceId))) return false;
-    return rule.actions.every((step) => validInstances.has(step.action.instanceId));
-  });
+  const rules = sanitizeRules(input.rules).filter((rule) => ruleUsesOnlyInstances(rule, validInstances));
 
   return {
     ...current,
@@ -980,11 +977,47 @@ function sanitizeManifest(input: ProjectManifest, current: ProjectManifest): Pro
     objects: current.objects.filter((file) => validObjects.has(file)),
     objectFolders: normalizeFolders(current.objectFolders, current.objects),
     styles: current.styles,
-    instances: current.instances,
+    instances,
     blackboard,
     rules,
     updatedAt: new Date().toISOString(),
   };
+}
+
+function sanitizeInstances(value: unknown, validObjects: Set<string>): ProjectInstance[] {
+  if (!Array.isArray(value)) return [];
+  const unique = new Map<string, ProjectInstance>();
+  for (const raw of value) {
+    if (!isInstance(raw)) continue;
+    const instance = sanitizeProjectInstance(raw);
+    if (!validObjects.has(instance.objectFile) || unique.has(instance.id)) continue;
+    unique.set(instance.id, instance);
+  }
+  const ids = new Set(unique.keys());
+  return [...unique.values()].map((instance) => {
+    if (!instance.parent || instance.parent.instanceId === instance.id || !ids.has(instance.parent.instanceId)) {
+      const { parent: _parent, ...root } = instance;
+      return root;
+    }
+    return instance;
+  });
+}
+
+function ruleUsesOnlyInstances(rule: EventRule, validInstances: Set<string>): boolean {
+  if (!validInstances.has(rule.event.instanceId)) return false;
+  if (!(rule.conditions ?? []).every((step) => validInstances.has(step.condition.instanceId) && bindingsUseOnlyInstances(step.inputs, validInstances))) return false;
+  return rule.actions.every((step) => validInstances.has(step.action.instanceId) && bindingsUseOnlyInstances(step.inputs, validInstances));
+}
+
+function bindingsUseOnlyInstances(bindings: Record<string, ValueBinding>, validInstances: Set<string>): boolean {
+  for (const binding of Object.values(bindings)) {
+    if (binding.kind === "state" && !validInstances.has(binding.instanceId)) return false;
+    if (binding.kind === "expression") {
+      const references = binding.source.matchAll(/@state\.([A-Za-z_][A-Za-z0-9_-]{0,79})\./g);
+      for (const match of references) if (!validInstances.has(match[1])) return false;
+    }
+  }
+  return true;
 }
 
 function sanitizeBlackboard(value: unknown): Record<string, BlackboardEntry> {

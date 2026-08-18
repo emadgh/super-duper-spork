@@ -35,6 +35,9 @@ const actionLibraryDialog = required<HTMLDialogElement>("#action-library-dialog"
 const closeActionLibraryButton = required<HTMLButtonElement>("#close-action-library");
 const actionLibraryGrid = required<HTMLElement>("#action-library-grid");
 const objectList = required<HTMLElement>("#object-list");
+const instanceList = required<HTMLElement>("#instance-list");
+const instanceProperties = required<HTMLElement>("#instance-properties");
+const addInstanceButton = required<HTMLButtonElement>("#add-instance");
 const objectFilter = required<HTMLInputElement>("#object-filter");
 const addObjectButton = required<HTMLButtonElement>("#add-object");
 const addLibraryActionButton = required<HTMLButtonElement>("#add-library-action");
@@ -80,6 +83,7 @@ editorHost.append(codeEditor.element);
 
 let project: LoadedProject | null = null;
 let selectedFile: string | null = null;
+let selectedInstanceId: string | null = null;
 let dirty = false;
 let runtime: EventRuntime | null = null;
 let previewFrame: HTMLIFrameElement | null = null;
@@ -120,6 +124,7 @@ projectManagerDialog.addEventListener("click", (event) => {
   if (event.target === projectManagerDialog) projectManagerDialog.close();
 });
 addObjectButton.addEventListener("click", () => void addObject());
+addInstanceButton.addEventListener("click", () => void addInstance());
 addLibraryActionButton.addEventListener("click", () => void openActionLibrary());
 closeActionLibraryButton.addEventListener("click", () => actionLibraryDialog.close());
 actionLibraryDialog.addEventListener("click", (event) => {
@@ -254,6 +259,7 @@ async function switchProject(projectId: string): Promise<void> {
   project = await api.loadProject(projectId);
   definitions = compileDefinitions(project.objects);
   selectedFile = project.manifest.objects[0] ?? null;
+  selectedInstanceId = selectedFile ? project.manifest.instances.find((item) => item.objectFile === selectedFile)?.id ?? null : null;
   selectedFolder = "";
   dirty = false;
 
@@ -263,6 +269,7 @@ async function switchProject(projectId: string): Promise<void> {
 
 function renderAll(): void {
   renderObjectList();
+  renderInstances();
   renderSelectedObject();
   renderBlackboard();
   void renderPackages();
@@ -476,12 +483,139 @@ function renderObjectTreeFile(file: string, depth: number, showPath = false): HT
   button.addEventListener("click", () => {
     if (dirty && !confirm("Discard unsaved changes?")) return;
     selectedFile = file;
+    selectedInstanceId = project?.manifest.instances.find((item) => item.objectFile === file)?.id ?? null;
     selectedFolder = objectParentFolder(file);
     dirty = false;
     renderObjectList();
+    renderInstances();
     renderSelectedObject();
   });
   return button;
+}
+
+function renderInstances(): void {
+  instanceList.replaceChildren();
+  instanceProperties.replaceChildren();
+  addInstanceButton.disabled = !project || !selectedFile;
+  if (!project || !selectedFile) {
+    instanceList.append(emptyInline("Select an Object Type."));
+    return;
+  }
+
+  const instances = project.manifest.instances.filter((item) => item.objectFile === selectedFile);
+  if (!instances.some((item) => item.id === selectedInstanceId)) selectedInstanceId = instances[0]?.id ?? null;
+
+  if (!instances.length) {
+    instanceList.append(emptyInline("No instances. Create the first one."));
+  }
+  for (const instance of instances) {
+    const row = document.createElement("div");
+    row.className = `instance-row${instance.id === selectedInstanceId ? " is-selected" : ""}`;
+    const select = document.createElement("button");
+    select.className = "instance-select";
+    select.innerHTML = `<strong>${escapeHtml(instance.id)}</strong><small>${instance.parent ? `slot: ${escapeHtml(instance.parent.slot)}` : "root"}</small>`;
+    select.addEventListener("click", () => {
+      selectedInstanceId = instance.id;
+      renderInstances();
+    });
+    const remove = document.createElement("button");
+    remove.className = "delete-mini";
+    remove.textContent = "×";
+    remove.title = `Delete ${instance.id}`;
+    remove.addEventListener("click", () => void deleteInstance(instance.id));
+    row.append(select, remove);
+    instanceList.append(row);
+  }
+
+  const selected = project.manifest.instances.find((item) => item.id === selectedInstanceId && item.objectFile === selectedFile);
+  if (!selected) return;
+  const definition = definitions.get(selectedFile);
+  const properties = Object.entries(definition?.properties ?? {});
+  if (!properties.length) {
+    instanceProperties.append(emptyInline("This Object Type declares no properties."));
+    return;
+  }
+
+  const heading = document.createElement("div");
+  heading.className = "instance-properties-title";
+  heading.innerHTML = `<strong>${escapeHtml(selected.id)}</strong><span>Properties</span>`;
+  instanceProperties.append(heading);
+
+  for (const [name, property] of properties) {
+    const row = document.createElement("label");
+    row.className = "instance-property-row";
+    const caption = document.createElement("span");
+    caption.textContent = property.label ?? name;
+    caption.title = property.description ?? name;
+    const hasOverride = Object.prototype.hasOwnProperty.call(selected.props ?? {}, name);
+    const input = inputForPort(property, hasOverride ? selected.props?.[name] : property.default ?? defaultValueForType(property.type));
+    input.title = property.description ?? `${selected.id}.${name}`;
+    input.addEventListener("change", () => void updateInstanceProperty(selected.id, name, property, readPortInput(input, property.type)));
+    row.append(caption, input);
+    instanceProperties.append(row);
+  }
+}
+
+async function addInstance(): Promise<void> {
+  if (!project || !selectedFile) return;
+  const definition = definitions.get(selectedFile);
+  const base = instanceIdBase(definition?.name ?? basenameWithoutExtension(selectedFile));
+  const used = new Set(project.manifest.instances.map((item) => item.id));
+  let index = 1;
+  while (used.has(`${base}${index}`)) index++;
+  const id = `${base}${index}`;
+  project.manifest.instances.push({ id, objectFile: selectedFile });
+  selectedInstanceId = id;
+  await persistManifest();
+  renderAll();
+}
+
+async function deleteInstance(instanceId: string): Promise<void> {
+  if (!project) return;
+  const instance = project.manifest.instances.find((item) => item.id === instanceId);
+  if (!instance) return;
+  const dependentRules = project.manifest.rules.filter((rule) => ruleReferencesInstance(rule, instanceId));
+  const children = project.manifest.instances.filter((item) => item.parent?.instanceId === instanceId);
+  const notes = [
+    dependentRules.length ? `${dependentRules.length} dependent rule(s) will be removed.` : "",
+    children.length ? `${children.length} child instance(s) will become root instances.` : "",
+  ].filter(Boolean).join(" ");
+  if (!confirm(`Delete instance "${instanceId}"?${notes ? ` ${notes}` : ""}`)) return;
+
+  project.manifest.instances = project.manifest.instances.filter((item) => item.id !== instanceId);
+  selectedInstanceId = project.manifest.instances.find((item) => item.objectFile === instance.objectFile)?.id ?? null;
+  await persistManifest();
+  renderAll();
+}
+
+async function updateInstanceProperty(instanceId: string, name: string, property: PortDefinition, value: unknown): Promise<void> {
+  if (!project) return;
+  const instance = project.manifest.instances.find((item) => item.id === instanceId);
+  if (!instance) return;
+  instance.props ??= {};
+  if (Object.is(value, property.default)) delete instance.props[name];
+  else instance.props[name] = value;
+  if (!Object.keys(instance.props).length) delete instance.props;
+  await persistManifest();
+  renderInstances();
+}
+
+function ruleReferencesInstance(rule: EventRule, instanceId: string): boolean {
+  if (rule.event.instanceId === instanceId) return true;
+  if ((rule.conditions ?? []).some((step) => step.condition.instanceId === instanceId || bindingsReferenceInstance(step.inputs, instanceId))) return true;
+  return rule.actions.some((step) => step.action.instanceId === instanceId || bindingsReferenceInstance(step.inputs, instanceId));
+}
+
+function bindingsReferenceInstance(bindings: Record<string, ValueBinding>, instanceId: string): boolean {
+  return Object.values(bindings).some((binding) =>
+    (binding.kind === "state" && binding.instanceId === instanceId) ||
+    (binding.kind === "expression" && binding.source.includes(`@state.${instanceId}.`))
+  );
+}
+
+function instanceIdBase(value: string): string {
+  const compact = value.replace(/[^A-Za-z0-9_]/g, "") || "object";
+  return compact.charAt(0).toLowerCase() + compact.slice(1);
 }
 
 function renderSelectedObject(): void {
@@ -524,6 +658,7 @@ function renderApiSummary(): void {
   }
 
   apiSummary.append(apiGroup("Object", [definition.name]));
+  apiSummary.append(apiGroup("Properties", Object.keys(definition.properties ?? {})));
   apiSummary.append(apiGroup("Events", Object.keys(definition.events ?? {}), "event"));
   apiSummary.append(apiGroup("Conditions", Object.keys(definition.conditions ?? {}), "condition"));
   apiSummary.append(apiGroup("Actions", Object.keys(definition.actions ?? {}), "action"));
@@ -541,6 +676,7 @@ async function saveSelectedObject(): Promise<void> {
     dirty = false;
     renderEditorStatus("Saved");
     renderObjectList();
+    renderInstances();
     renderApiSummary();
     renderEventOptions();
     renderRules();
@@ -1227,6 +1363,7 @@ async function addReadyAction(template: ActionTemplateSummary): Promise<void> {
     project = updated;
     definitions = compileDefinitions(updated.objects);
     selectedFile = updated.manifest.objects.at(-1) ?? null;
+    selectedInstanceId = selectedFile ? updated.manifest.instances.find((item) => item.objectFile === selectedFile)?.id ?? null : null;
     if (selectedFile) selectedFolder = objectParentFolder(selectedFile);
     dirty = false;
     actionLibraryDialog.close();
@@ -1246,6 +1383,7 @@ async function addObject(): Promise<void> {
     project = updated;
     definitions = compileDefinitions(updated.objects);
     selectedFile = updated.manifest.objects.at(-1) ?? null;
+    selectedInstanceId = selectedFile ? updated.manifest.instances.find((item) => item.objectFile === selectedFile)?.id ?? null : null;
     if (selectedFile) selectedFolder = objectParentFolder(selectedFile);
     dirty = false;
     renderAll();
@@ -1838,6 +1976,7 @@ function renderProjectMeta(): void {
 function clearWorkspace(): void {
   project = null;
   selectedFile = null;
+  selectedInstanceId = null;
   definitions.clear();
   renderAll();
 }
