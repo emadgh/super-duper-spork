@@ -1,6 +1,6 @@
 import { evaluateObjectFile } from "../client/compiler.ts";
-import type { LoadedProject, ObjectDefinition } from "../client/model.ts";
-import { EventRuntime } from "../client/runtime.ts";
+import type { BlackboardEntry, LoadedProject, ObjectDefinition } from "../client/model.ts";
+import { EventRuntime, type RuntimeTrace } from "../client/runtime.ts";
 import { APP_BRIDGE_VERSION, isStudioMessage, type AppToStudioMessage } from "./bridge.ts";
 
 interface KernelBootstrap {
@@ -8,18 +8,20 @@ interface KernelBootstrap {
   dataUrl: string;
 }
 
+type AppMessagePayload =
+  | { type: "ready"; projectId: string }
+  | { type: "trace"; projectId: string; trace: RuntimeTrace }
+  | { type: "blackboard"; projectId: string; blackboard: Record<string, BlackboardEntry> }
+  | { type: "error"; projectId: string; message: string; stack?: string };
+
 declare global {
   interface Window {
     __SPORK_APP__?: KernelBootstrap;
   }
 }
 
-const root = document.querySelector<HTMLElement>("#spork-app-root");
-if (!root) throw new Error("App Kernel root #spork-app-root was not found.");
-
-const bootstrap = window.__SPORK_APP__;
-if (!bootstrap?.projectId || !bootstrap.dataUrl) throw new Error("App Kernel bootstrap data is missing.");
-
+const root = requireRoot();
+const bootstrap = requireBootstrap();
 let runtime: EventRuntime | null = null;
 
 window.addEventListener("message", (event) => {
@@ -29,7 +31,12 @@ window.addEventListener("message", (event) => {
 });
 
 window.addEventListener("error", (event) => {
-  post({ type: "error", projectId: bootstrap.projectId, message: event.message, stack: event.error instanceof Error ? event.error.stack : undefined });
+  post({
+    type: "error",
+    projectId: bootstrap.projectId,
+    message: event.message,
+    stack: event.error instanceof Error ? event.error.stack : undefined,
+  });
 });
 window.addEventListener("unhandledrejection", (event) => {
   const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
@@ -63,7 +70,22 @@ async function boot(): Promise<void> {
   post({ type: "ready", projectId: bootstrap.projectId });
 }
 
-function post(message: Omit<AppToStudioMessage, "source" | "version">): void {
+function requireRoot(): HTMLElement {
+  const element = document.querySelector<HTMLElement>("#spork-app-root");
+  if (!element) throw new Error("App Kernel root #spork-app-root was not found.");
+  return element;
+}
+
+function requireBootstrap(): KernelBootstrap {
+  const value = window.__SPORK_APP__;
+  if (!value || typeof value.projectId !== "string" || !value.projectId || typeof value.dataUrl !== "string" || !value.dataUrl) {
+    throw new Error("App Kernel bootstrap data is missing.");
+  }
+  return value;
+}
+
+function post(message: AppMessagePayload): void {
   if (window.parent === window) return;
-  window.parent.postMessage({ source: "spork-app", version: APP_BRIDGE_VERSION, ...message } satisfies AppToStudioMessage, "*");
+  const outgoing: AppToStudioMessage = { source: "spork-app", version: APP_BRIDGE_VERSION, ...message };
+  window.parent.postMessage(outgoing, "*");
 }
