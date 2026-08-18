@@ -61,7 +61,7 @@ export class EventRuntime {
     }
   }
 
-  mountPreview(root: HTMLElement, options: { styles?: readonly string[] } = {}): void {
+  mountPreview(root: HTMLElement, options: { styles?: readonly string[]; chrome?: boolean } = {}): void {
     root.replaceChildren();
     const appRoot = document.createElement("div");
     appRoot.className = "spork-app";
@@ -86,7 +86,7 @@ export class EventRuntime {
         host.className = "preview-component";
         host.dataset.instanceId = instance.id;
         target.append(host);
-      } else {
+      } else if (options.chrome !== false) {
         const card = document.createElement("section");
         card.className = "preview-object";
         card.dataset.instanceId = instance.id;
@@ -99,6 +99,11 @@ export class EventRuntime {
         host.className = "preview-object__host";
         card.append(header, host);
         target.append(card);
+      } else {
+        host = document.createElement("div");
+        host.className = "preview-component preview-component--root";
+        host.dataset.instanceId = instance.id;
+        target.append(host);
       }
 
       const baseContext = {

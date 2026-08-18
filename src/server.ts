@@ -1,6 +1,7 @@
 import ts from "npm:typescript@5.9.2";
 import { defaultStyleCompiler } from "./server/style-pipeline.ts";
 import { packagePresetSummaries, ProjectPackageManager, sanitizePackageManifest } from "./server/package-manager.ts";
+import { buildStandaloneApp } from "./server/app-builder.ts";
 
 type PortType = "number" | "string" | "boolean" | "any";
 
@@ -57,6 +58,7 @@ interface ProjectManifest {
 const ROOT = new URL("../", import.meta.url);
 const PROJECTS_DIR = new URL("workspace/projects/", ROOT);
 const TEMPLATES_DIR = new URL("templates/", ROOT);
+const BUILDS_DIR = new URL("workspace/builds/", ROOT);
 const DIST_MODE = Deno.args.includes("--dist");
 const PORT = 8000;
 
@@ -69,6 +71,9 @@ async function main(): Promise<void> {
 
       if (url.pathname.startsWith("/api/")) {
         return await handleApi(request, url);
+      }
+      if (url.pathname.startsWith("/apps/")) {
+        return await serveProjectApp(url.pathname);
       }
 
       return await serveApp(url.pathname);
@@ -120,6 +125,13 @@ async function handleApi(request: Request, url: URL): Promise<Response> {
         await writeManifest(next);
         return json(await loadProject(projectId));
       }
+    }
+
+    if (parts.length === 4 && parts[3] === "build" && request.method === "POST") {
+      const project = await loadProject(projectId);
+      const outputRoot = new URL(`${projectId}/`, BUILDS_DIR);
+      const result = await buildStandaloneApp({ projectId, projectRoot: projectUrl(projectId), outputRoot, project });
+      return json({ ok: true, projectId, output: decodeURIComponent(result.outputRoot.pathname) });
     }
 
     if (parts.length === 4 && parts[3] === "objects" && request.method === "POST") {
@@ -228,10 +240,42 @@ async function handleApi(request: Request, url: URL): Promise<Response> {
   return json({ error: "Not found." }, 404);
 }
 
+async function serveProjectApp(pathname: string): Promise<Response> {
+  const parts = pathname.split("/").filter(Boolean).map(decodeURIComponent);
+  if (parts.length < 2 || parts[0] !== "apps") return new Response("Not found", { status: 404 });
+  const projectId = validateProjectId(parts[1]);
+  if (parts.length === 3 && parts[2] === "app-data.json") {
+    const response = json(await loadProject(projectId));
+    response.headers.set("access-control-allow-origin", "*");
+    return response;
+  }
+  if (parts.length === 2) return projectAppHtml(projectId);
+  return new Response("Not found", { status: 404 });
+}
+
+function projectAppHtml(projectId: string): Response {
+  const id = JSON.stringify(projectId);
+  const dataUrl = JSON.stringify(`/apps/${encodeURIComponent(projectId)}/app-data.json`);
+  const html = `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Spork App</title>
+<style>html,body,#spork-app-root{min-height:100%;margin:0}body{background:#11141b;color:#f5f7fb}</style></head>
+<body><div id="spork-app-root"></div>
+<script>window.__SPORK_APP__={projectId:${id},dataUrl:${dataUrl}};<\/script>
+<script type="module" src="/app-kernel/browser.js"><\/script></body></html>`;
+  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+}
+
 async function serveApp(pathname: string): Promise<Response> {
   if (DIST_MODE) {
     if (pathname === "/") return fileResponse(new URL("dist/index.html", ROOT), "text/html; charset=utf-8");
     if (pathname === "/styles.css") return fileResponse(new URL("dist/styles.css", ROOT), "text/css; charset=utf-8");
+    if (pathname.startsWith("/app-kernel/") && pathname.endsWith(".js")) {
+      const relative = pathname.replace(/^\/app-kernel\//, "");
+      const response = await fileResponse(new URL(`dist/app-kernel/${relative}`, ROOT), "text/javascript; charset=utf-8");
+      response.headers.set("access-control-allow-origin", "*");
+      return response;
+    }
     if (pathname.startsWith("/client/") && pathname.endsWith(".js")) {
       const relative = pathname.replace(/^\//, "");
       return fileResponse(new URL(`dist/${relative}`, ROOT), "text/javascript; charset=utf-8");
@@ -241,6 +285,17 @@ async function serveApp(pathname: string): Promise<Response> {
 
   if (pathname === "/") return fileResponse(new URL("src/client/index.html", ROOT), "text/html; charset=utf-8");
   if (pathname === "/styles.css") return fileResponse(new URL("src/client/styles.css", ROOT), "text/css; charset=utf-8");
+
+  if (pathname.startsWith("/app-kernel/") && pathname.endsWith(".js")) {
+    const relative = pathname.slice("/app-kernel/".length).replace(/\.js$/, ".ts");
+    if (!/^[a-zA-Z0-9_.-]+\.ts$/.test(relative)) return new Response("Invalid path", { status: 400 });
+    const source = await Deno.readTextFile(new URL(`src/app-kernel/${relative}`, ROOT));
+    const result = ts.transpileModule(source, {
+      fileName: relative,
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022, strict: true, rewriteRelativeImportExtensions: true },
+    });
+    return new Response(result.outputText, { headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*" } });
+  }
 
   if (pathname.startsWith("/client/") && pathname.endsWith(".js")) {
     const relative = pathname.slice("/client/".length).replace(/\.js$/, ".ts");
@@ -261,7 +316,7 @@ async function serveApp(pathname: string): Promise<Response> {
         },
       });
       return new Response(result.outputText, {
-        headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" },
+        headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*" },
       });
     } catch (error) {
       if (error instanceof Deno.errors.NotFound) return new Response("Not found", { status: 404 });

@@ -27,6 +27,11 @@ export const api = {
   createProject(name: string): Promise<LoadedProject> {
     return request<LoadedProject>("/api/projects", { method: "POST", body: JSON.stringify({ name }) });
   },
+  buildProject(projectId: string): Promise<{ ok: true; projectId: string; output: string }> {
+    return request<{ ok: true; projectId: string; output: string }>(`/api/projects/${encodeURIComponent(projectId)}/build`, {
+      method: "POST", body: JSON.stringify({}),
+    });
+  },
   addObject(projectId: string, name: string, folder = ""): Promise<LoadedProject> {
     return request<LoadedProject>(`/api/projects/${encodeURIComponent(projectId)}/objects`, {
       method: "POST", body: JSON.stringify({ name, folder }),
