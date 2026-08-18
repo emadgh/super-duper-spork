@@ -1,0 +1,47 @@
+name: Run package manager Studio UI patch
+
+on:
+  push:
+    branches:
+      - feature/project-package-manager
+    paths:
+      - ".github/workflows/run-package-manager-ui.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/project-package-manager
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Extract UI patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/apply-package-manager-ui.yml').read_text().splitlines()
+          start = next(i for i, line in enumerate(source) if "python3 - <<'PY'" in line) + 1
+          end = next(i for i in range(start, len(source)) if source[i].strip() == 'PY')
+          block = source[start:end]
+          normalized = '\n'.join(line[10:] if line.startswith('          ') else line for line in block)
+          Path('/tmp/package_ui.py').write_text(normalized + '\n')
+          PY
+      - name: Apply UI patch
+        run: python3 /tmp/package_ui.py
+      - name: Validate
+        run: |
+          deno task check
+          deno task test
+          deno task build
+      - name: Commit UI
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/client/index.html src/client/main.ts src/client/styles.css deno.lock
+          git commit -m "feat(packages): add permission-aware Studio package view (#6)"
+          git push origin HEAD:feature/project-package-manager
