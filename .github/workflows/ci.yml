@@ -21,15 +21,57 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - name: Extract integration patch
+      - name: Extract and repair integration patch
         run: |
           python3 - <<'PY'
           from pathlib import Path
           source = Path('.github/workflows/apply-phone-book-integration.yml').read_text().splitlines()
           start = next(i for i, line in enumerate(source) if "python3 - <<'PY'" in line) + 1
           end = next(i for i in range(start, len(source)) if source[i].strip() == 'PY')
-          block = source[start:end]
-          Path('/tmp/phonebook_patch.py').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in block) + '\n')
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in source[start:end]) + '\n'
+          a = script.index('          # Object lifecycle:')
+          b = script.index('          # App builder reads build.json', a)
+          lifecycle = r'''          # Object lifecycle: emit declared `created` events once after construction.
+          p = Path('src/client/runtime.ts')
+          s = p.read_text()
+          old = ''' + "'''" + r'''    for (const instance of instances) {
+      const definition = definitionsByFile.get(instance.objectFile);
+      if (!definition) continue;
+      this.#runtimeInstances.set(instance.id, {
+        id: instance.id,
+        definition,
+        state: cloneState(definition.state ?? {}),
+        props: Object.freeze(structuredClone(instance.props ?? {})),
+      });
+    }
+  }
+
+  mountPreview''' + "'''" + r'''
+          new = ''' + "'''" + r'''    for (const instance of instances) {
+      const definition = definitionsByFile.get(instance.objectFile);
+      if (!definition) continue;
+      this.#runtimeInstances.set(instance.id, {
+        id: instance.id,
+        definition,
+        state: cloneState(definition.state ?? {}),
+        props: Object.freeze(structuredClone(instance.props ?? {})),
+      });
+    }
+
+    queueMicrotask(() => {
+      for (const instance of this.#runtimeInstances.values()) {
+        if (instance.definition.events?.created) this.emit(instance.id, "created");
+      }
+    });
+  }
+
+  mountPreview''' + "'''" + r'''
+          if old not in s: raise RuntimeError('created lifecycle anchor missing')
+          p.write_text(s.replace(old, new, 1))
+
+'''
+          script = script[:a] + lifecycle + script[b:]
+          Path('/tmp/phonebook_patch.py').write_text(script)
           PY
       - name: Apply integration
         run: python3 /tmp/phonebook_patch.py
