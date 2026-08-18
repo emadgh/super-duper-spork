@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v5
       # BEGIN EXPRESSION BOOTSTRAP
       - name: Apply expression integration branch patch
-        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/expression-engine'
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/feature/expression-engine')
         shell: bash
         run: |
           if [ ! -f scripts/patch-expression-integration.py ]; then
@@ -32,19 +32,13 @@ jobs:
 
           expression = Path('src/client/expression.ts')
           source = expression.read_text(encoding='utf-8')
-          old = '''    case "!==": return left !== right;
-            case "&&":
-            case "||":
-            case "??": throw new Error(`Internal expression evaluator error for ${node.operator}.`);
-            }
-            }'''.replace('            ', '')
-          new = '''    case "!==": return left !== right;
-            }
-            throw new Error("Unsupported expression operator.");
-            }'''.replace('            ', '')
-          if old not in source:
-              raise SystemExit('expression evaluator fragment not found')
-          expression.write_text(source.replace(old, new, 1), encoding='utf-8')
+          unreachable = '''    case "&&":
+    case "||":
+    case "??": throw new Error(`Internal expression evaluator error for ${node.operator}.`);
+'''
+          if unreachable not in source:
+              raise SystemExit('expression evaluator logical cases not found')
+          expression.write_text(source.replace(unreachable, '', 1), encoding='utf-8')
 
           ci = Path('.github/workflows/ci.yml')
           workflow = ci.read_text(encoding='utf-8')
