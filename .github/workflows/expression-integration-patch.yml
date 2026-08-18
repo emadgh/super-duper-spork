@@ -1,0 +1,37 @@
+name: Expression Integration Patch
+
+on:
+  push:
+    branches:
+      - feature/expression-engine
+    paths:
+      - .github/workflows/expression-integration-patch.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/expression-engine
+          fetch-depth: 0
+      - name: Apply expression integration patch
+        run: python3 scripts/patch-expression-integration.py
+      - name: Commit patch and remove one-shot files
+        shell: bash
+        run: |
+          rm .github/workflows/expression-integration-patch.yml scripts/patch-expression-integration.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No patch changes to commit."
+            exit 0
+          fi
+          git commit -m "Wire expression bindings into editor persistence and CI"
+          git push origin HEAD:feature/expression-engine
