@@ -66,7 +66,7 @@ export const PACKAGE_PRESETS: readonly PackagePreset[] = [
         role: "runtime",
         native: true,
         allowScripts: ["npm:better-sqlite3"],
-        permissions: { ffi: true, sys: ["cpus"] },
+        permissions: { ffi: true, sys: ["cpus", "hostname", "networkInterfaces"] },
       },
     ],
   },
