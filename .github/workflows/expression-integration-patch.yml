@@ -33,9 +33,9 @@ jobs:
           expression = Path("src/client/expression.ts")
           source = expression.read_text(encoding="utf-8")
           unreachable = '''    case "&&":
-          case "||":
-          case "??": throw new Error(`Internal expression evaluator error for ${node.operator}.`);
-          '''.replace("          ", "")
+    case "||":
+    case "??": throw new Error(`Internal expression evaluator error for ${node.operator}.`);
+'''
           if unreachable not in source:
               raise SystemExit("expression evaluator logical cases not found")
           source = source.replace(unreachable, "", 1)
