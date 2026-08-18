@@ -132,7 +132,10 @@ export interface ActionStep {
 export interface EventRule {
   id: string;
   event: EventEndpoint;
-  /** Missing/empty conditions means the rule is unconditional for v3 compatibility. */
+  /**
+   * Conditions run in declaration order with AND/short-circuit semantics.
+   * Missing/empty conditions means the rule is unconditional for v3 compatibility.
+   */
   conditions?: ConditionStep[];
   actions: ActionStep[];
 }
