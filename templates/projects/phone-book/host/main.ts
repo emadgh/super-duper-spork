@@ -1,3 +1,4 @@
+import "reflect-metadata";
 import type { AppHostContext } from "../kernel/host-api.ts";
 import { closeDataSource, getDataSource } from "./database.ts";
 import { ContactNotFoundError, ContactService, type ContactInput } from "./services/ContactService.ts";
