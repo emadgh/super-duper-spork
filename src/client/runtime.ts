@@ -58,7 +58,7 @@ export class EventRuntime {
         id: instance.id,
         definition,
         state: cloneState(definition.state ?? {}),
-        props: Object.freeze(structuredClone(instance.props ?? {})),
+        props: resolveInstanceProps(definition, instance.props),
       });
     }
 
@@ -203,6 +203,10 @@ export class EventRuntime {
     return this.#runtimeInstances.get(instanceId)?.state;
   }
 
+  getProps(instanceId: string): Readonly<Record<string, unknown>> | undefined {
+    return this.#runtimeInstances.get(instanceId)?.props;
+  }
+
   getBlackboard(): Record<string, BlackboardEntry> {
     return structuredClone(this.#blackboard);
   }
@@ -335,6 +339,16 @@ function getPath(source: unknown, path: string): unknown {
     value = (value as Record<string, unknown>)[part];
   }
   return value;
+}
+
+function resolveInstanceProps(
+  definition: ObjectDefinition,
+  overrides: Record<string, unknown> | undefined,
+): Readonly<Record<string, unknown>> {
+  const defaults = Object.fromEntries(
+    Object.entries(definition.properties ?? {}).map(([name, property]) => [name, structuredClone(property.default)]),
+  );
+  return Object.freeze({ ...defaults, ...structuredClone(overrides ?? {}) });
 }
 
 function cloneState(source: Record<string, unknown>): Record<string, unknown> {
