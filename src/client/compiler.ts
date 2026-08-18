@@ -1,3 +1,4 @@
+import { Fragment, h, Slot } from "./dom-core/index.ts";
 import type { ObjectDefinition, ProjectObjectFile } from "./model.ts";
 
 export function evaluateObjectFile(file: ProjectObjectFile): ObjectDefinition {
@@ -9,10 +10,13 @@ export function evaluateObjectFile(file: ProjectObjectFile): ObjectDefinition {
     "module",
     "exports",
     "defineObject",
+    "h",
+    "Fragment",
+    "Slot",
     `${file.compiled}\n//# sourceURL=${file.file}`,
   );
 
-  execute(module, exports, defineObject);
+  execute(module, exports, defineObject, h, Fragment, Slot);
 
   const exported = (module.exports as { default?: unknown }).default ?? module.exports;
   if (!isObjectDefinition(exported)) {
@@ -27,6 +31,7 @@ function isObjectDefinition(value: unknown): value is ObjectDefinition {
   if (typeof candidate.name !== "string" || candidate.name.trim() === "") return false;
   if (candidate.events && typeof candidate.events !== "object") return false;
   if (candidate.actions && typeof candidate.actions !== "object") return false;
+  if (candidate.render && typeof candidate.render !== "function") return false;
   if (candidate.mount && typeof candidate.mount !== "function") return false;
   return true;
 }
