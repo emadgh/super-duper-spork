@@ -49,6 +49,18 @@ export function styleLinks(manifest: ProjectBuildManifest): string[] {
   return manifest.styles.map((entry) => `/${entry.output.replace(/^public\//, "")}`);
 }
 
+export function tailwindReadAllowlist(projectRoot: URL): string[] {
+  const paths = [toFsPath(new URL("./", projectRoot))];
+  let current = new URL("../", projectRoot);
+  while (true) {
+    paths.push(toFsPath(new URL("package.json", current)));
+    const parent = new URL("../", current);
+    if (parent.href === current.href) break;
+    current = parent;
+  }
+  return [...new Set(paths)];
+}
+
 export async function runBuildProviders(
   projectRoot: URL,
   outputRoot: URL,
@@ -73,13 +85,14 @@ async function runTailwind(projectRoot: URL, outputRoot: URL, entry: TailwindSty
   await Deno.mkdir(new URL(".", outputUrl), { recursive: true });
 
   const outputParent = toFsPath(new URL(".", outputUrl));
+  const readAllowlist = tailwindReadAllowlist(projectRoot).join(",");
   const command = new Deno.Command(Deno.execPath(), {
     cwd: toFsPath(projectRoot),
     args: [
       "run",
       "--config",
       "deno.json",
-      "--allow-read=.",
+      `--allow-read=${readAllowlist}`,
       `--allow-write=${outputParent}`,
       "--allow-env",
       "--allow-sys",
