@@ -1,4 +1,11 @@
-import type { ActionTemplateSummary, LoadedProject, ProjectManifest, ProjectSummary } from "./model.ts";
+import type {
+  ActionTemplateSummary,
+  LoadedProject,
+  PackagePresetSummary,
+  ProjectManifest,
+  ProjectPackageState,
+  ProjectSummary,
+} from "./model.ts";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -15,6 +22,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   listProjects(): Promise<ProjectSummary[]> { return request<ProjectSummary[]>("/api/projects"); },
   listActionTemplates(): Promise<ActionTemplateSummary[]> { return request<ActionTemplateSummary[]>("/api/action-library"); },
+  listPackagePresets(): Promise<PackagePresetSummary[]> { return request<PackagePresetSummary[]>("/api/package-library"); },
   loadProject(projectId: string): Promise<LoadedProject> { return request<LoadedProject>(`/api/projects/${encodeURIComponent(projectId)}`); },
   createProject(name: string): Promise<LoadedProject> {
     return request<LoadedProject>("/api/projects", { method: "POST", body: JSON.stringify({ name }) });
@@ -32,6 +40,21 @@ export const api = {
   saveStyle(projectId: string, file: string, source: string): Promise<LoadedProject> {
     return request<LoadedProject>(`/api/projects/${encodeURIComponent(projectId)}/styles/${encodeURIComponent(file)}`, {
       method: "PUT", body: JSON.stringify({ source }),
+    });
+  },
+  addPackagePreset(projectId: string, presetId: string): Promise<LoadedProject> {
+    return request<LoadedProject>(`/api/projects/${encodeURIComponent(projectId)}/packages/presets`, {
+      method: "POST", body: JSON.stringify({ presetId }),
+    });
+  },
+  removePackage(projectId: string, packageId: string): Promise<LoadedProject> {
+    return request<LoadedProject>(`/api/projects/${encodeURIComponent(projectId)}/packages/${encodeURIComponent(packageId)}`, {
+      method: "DELETE", body: JSON.stringify({}),
+    });
+  },
+  installPackages(projectId: string): Promise<{ packages: ProjectPackageState; output: string }> {
+    return request<{ packages: ProjectPackageState; output: string }>(`/api/projects/${encodeURIComponent(projectId)}/packages/install`, {
+      method: "POST", body: JSON.stringify({}),
     });
   },
   addActionTemplate(projectId: string, templateId: string, folder = ""): Promise<LoadedProject> {
