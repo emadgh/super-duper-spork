@@ -1,0 +1,60 @@
+name: Run project stylesheet integration v2
+
+on:
+  push:
+    branches:
+      - feature/project-style-pipeline
+    paths:
+      - ".github/workflows/run-project-styles-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/project-style-pipeline
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Extract v2 patcher
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/apply-project-styles-v2.yml').read_text().splitlines()
+          start = next(i for i, line in enumerate(source) if "cat > /tmp/patch.py <<'PY'" in line) + 1
+          end = next(i for i in range(start, len(source)) if source[i].strip() == 'PY')
+          block = source[start:end]
+          normalized = '\n'.join(line[10:] if line.startswith('          ') else line for line in block)
+          Path('/tmp/patch.py').write_text(normalized + '\n')
+          PY
+      - name: Apply and validate with diagnostics
+        run: |
+          mkdir -p .ci
+          set +e
+          python3 /tmp/patch.py > .ci/style-v2-report.txt 2>&1
+          patch=$?
+          echo "PATCH_STATUS=$patch" >> .ci/style-v2-report.txt
+          if [ "$patch" -eq 0 ]; then
+            deno task check >> .ci/style-v2-report.txt 2>&1
+            echo "CHECK_STATUS=$?" >> .ci/style-v2-report.txt
+            deno task test >> .ci/style-v2-report.txt 2>&1
+            echo "TEST_STATUS=$?" >> .ci/style-v2-report.txt
+            deno task build >> .ci/style-v2-report.txt 2>&1
+            echo "BUILD_STATUS=$?" >> .ci/style-v2-report.txt
+          fi
+          cat .ci/style-v2-report.txt
+          exit 0
+      - name: Commit source or report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server.ts src/client/runtime.ts src/client/main.ts deno.lock .ci/style-v2-report.txt
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "feat(styles): apply or diagnose project CSS integration (#5)"
+          git push origin HEAD:feature/project-style-pipeline
