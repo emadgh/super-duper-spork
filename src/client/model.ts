@@ -1,3 +1,5 @@
+import type { DomChild } from "./dom-core/index.ts";
+
 export type PortType = "number" | "string" | "boolean" | "any";
 
 export interface PortDefinition {
@@ -28,11 +30,18 @@ export interface ObjectActionDefinition {
   run: (context: ActionContext, inputs: Record<string, unknown>) => Record<string, unknown> | void;
 }
 
-export interface MountContext<State extends Record<string, unknown> = Record<string, unknown>> {
-  host: HTMLElement;
+export interface RenderContext<State extends Record<string, unknown> = Record<string, unknown>> {
   state: State;
   props: Readonly<Record<string, unknown>>;
   emit: (eventName: string, payload?: unknown) => void;
+}
+
+/**
+ * Legacy/escape-hatch mount contract. New visual objects should prefer `render`
+ * so DomCore owns DOM creation, event cleanup, and slot discovery.
+ */
+export interface MountContext<State extends Record<string, unknown> = Record<string, unknown>> extends RenderContext<State> {
+  host: HTMLElement;
 }
 
 export interface MountedObject {
@@ -48,6 +57,9 @@ export interface ObjectDefinition {
   state?: Record<string, unknown>;
   events?: Record<string, ObjectEventDefinition>;
   actions?: Record<string, ObjectActionDefinition>;
+  /** Preferred declarative UI contract. TSX compiles to DomCore VNodes. */
+  render?: (context: RenderContext) => DomChild;
+  /** Low-level DOM escape hatch retained for backward compatibility. */
   mount?: (context: MountContext) => MountedObject | void;
 }
 
