@@ -716,8 +716,10 @@ function renderConditionInputPort(rule: EventRule, step: ConditionStep, name: st
   ];
   for (const item of kinds) kind.append(option(item.value, item.label));
 
-  let binding = step.inputs[name] ?? defaultBinding(port);
-  if (binding.kind === "output") binding = defaultBinding(port);
+  const currentBinding = step.inputs[name];
+  let binding: Exclude<ValueBinding, { kind: "output" }> = currentBinding && currentBinding.kind !== "output"
+    ? currentBinding
+    : { kind: "literal", value: port.default ?? defaultValueForType(port.type) };
   step.inputs[name] = binding;
   kind.value = binding.kind;
 
