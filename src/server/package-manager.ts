@@ -41,7 +41,13 @@ export const PACKAGE_PRESETS: readonly PackagePreset[] = [
     name: "TypeORM",
     description: "TypeORM 1.1 with reflection metadata support.",
     packages: [
-      { id: "typeorm", alias: "typeorm", specifier: "npm:typeorm@1.1.0", role: "runtime" },
+      {
+        id: "typeorm",
+        alias: "typeorm",
+        specifier: "npm:typeorm@1.1.0",
+        role: "runtime",
+        permissions: { env: ["TINYGLOBBY_DEBUG"] },
+      },
       { id: "reflect-metadata", alias: "reflect-metadata", specifier: "npm:reflect-metadata@0.2.2", role: "runtime" },
     ],
   },
