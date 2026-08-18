@@ -13,7 +13,7 @@ export interface ExpressionValidationResult {
   error?: string;
 }
 
-const MAX_SOURCE_LENGTH = 2048;
+export const EXPRESSION_SOURCE_LIMIT = 2048;
 const MAX_TOKENS = 512;
 const MAX_EVAL_DEPTH = 64;
 const MAX_CACHE_SIZE = 128;
@@ -50,7 +50,7 @@ export function clearExpressionCache(): void {
 
 function compileExpression(source: string): ExpressionNode {
   if (typeof source !== "string") throw new ExpressionSyntaxError("Expression must be a string", 0);
-  if (source.length > MAX_SOURCE_LENGTH) throw new ExpressionSyntaxError(`Expression exceeds ${MAX_SOURCE_LENGTH} characters`, MAX_SOURCE_LENGTH);
+  if (source.length > EXPRESSION_SOURCE_LIMIT) throw new ExpressionSyntaxError(`Expression exceeds ${EXPRESSION_SOURCE_LIMIT} characters`, EXPRESSION_SOURCE_LIMIT);
   const trimmed = source.trim();
   if (!trimmed) throw new ExpressionSyntaxError("Expression is empty", 0);
 
@@ -360,9 +360,6 @@ function evaluateNode(node: ExpressionNode, resolve: ExpressionReferenceResolver
     case ">=": return compare(left, right) >= 0;
     case "===": return left === right;
     case "!==": return left !== right;
-    case "&&":
-    case "||":
-    case "??": throw new Error(`Internal expression evaluator error for ${node.operator}.`);
   }
 }
 
