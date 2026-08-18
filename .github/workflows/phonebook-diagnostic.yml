@@ -1,0 +1,68 @@
+name: Phone Book Diagnostic
+
+on:
+  push:
+    branches:
+      - feature/phone-book-reference
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Start Studio and diagnose Phone Book build
+        shell: bash
+        run: |
+          set -u
+          deno task dev > /tmp/studio-phonebook.log 2>&1 &
+          studio_pid=$!
+          trap 'kill "$studio_pid" 2>/dev/null || true' EXIT
+
+          ready=0
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/api/projects >/tmp/projects.json; then
+              ready=1
+              break
+            fi
+            sleep 0.5
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo '--- Studio failed to become ready ---'
+            cat /tmp/studio-phonebook.log
+            exit 1
+          fi
+
+          echo '--- Phone Book project ---'
+          curl -fsS http://127.0.0.1:8000/api/projects/phone-book-demo | python3 -m json.tool
+
+          echo '--- Build request ---'
+          http_code=$(curl -sS -o /tmp/phonebook-build.json -w '%{http_code}' \
+            -X POST -H 'content-type: application/json' -d '{}' \
+            http://127.0.0.1:8000/api/projects/phone-book-demo/build)
+          echo "HTTP $http_code"
+          cat /tmp/phonebook-build.json || true
+
+          echo
+          echo '--- Studio log ---'
+          cat /tmp/studio-phonebook.log || true
+
+          echo
+          echo '--- Generated project config ---'
+          cat workspace/projects/phone-book-demo/deno.json || true
+          echo
+          cat workspace/projects/phone-book-demo/packages.json || true
+
+          echo
+          echo '--- Project node_modules snapshot ---'
+          find workspace/projects/phone-book-demo/node_modules -maxdepth 3 -type f 2>/dev/null | head -80 || true
+
+          if [ "$http_code" != "200" ]; then
+            exit 1
+          fi
