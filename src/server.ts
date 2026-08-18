@@ -370,6 +370,7 @@ async function ensureRealCalculatorDemo(): Promise<void> {
     name: "Calculator · Real Demo",
     objects: ["UI/CalculatorShell.ts", "Logic/CalculatorEngine.ts"],
     objectFolders: ["UI", "Logic"],
+    styles: [],
     instances: [
       { id: "calculatorUI", objectFile: "UI/CalculatorShell.ts" },
       { id: "calculatorEngine", objectFile: "Logic/CalculatorEngine.ts" },
