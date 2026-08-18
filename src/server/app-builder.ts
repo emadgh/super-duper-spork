@@ -79,7 +79,8 @@ function createStandaloneDenoConfig(
   if (permissions.ffi) permissionArgs.push("--allow-ffi");
   if (permissions.sys?.length) permissionArgs.push(`--allow-sys=${permissions.sys.join(",")}`);
   if (permissions.run?.length) permissionArgs.push(`--allow-run=${permissions.run.join(",")}`);
-  if (permissions.env?.length) permissionArgs[3] = `--allow-env=${["PORT", ...permissions.env].join(",")}`;
+  if (permissions.envAll) permissionArgs[3] = "--allow-env";
+  else if (permissions.env?.length) permissionArgs[3] = `--allow-env=${["PORT", ...permissions.env].join(",")}`;
   if (permissions.net?.length) permissionArgs[0] = `--allow-net=${["127.0.0.1", "localhost", ...permissions.net].join(",")}`;
 
   return {
