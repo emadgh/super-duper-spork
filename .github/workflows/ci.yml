@@ -49,7 +49,11 @@ jobs:
           fi
           grep -F "Calculator · Modular Demo" /tmp/projects.json
           curl -fsS http://127.0.0.1:8000/api/projects/calculator-modular-demo > /tmp/calculator.json
-          grep -F '"styles":[' /tmp/calculator.json
+          grep -F '"file":"UI/CalculatorShell.tsx"' /tmp/calculator.json
+          grep -F '"file":"UI/CalculatorDisplay.tsx"' /tmp/calculator.json
+          grep -F '"file":"UI/CalculatorKey.tsx"' /tmp/calculator.json
+          grep -F '"file":"calculator.css"' /tmp/calculator.json
+          grep -F '.calculator-shell' /tmp/calculator.json
           curl -fsS http://127.0.0.1:8000/api/action-library > /tmp/actions.json
           grep -F '"id":"math.add"' /tmp/actions.json
           grep -F '"id":"math.divide"' /tmp/actions.json
