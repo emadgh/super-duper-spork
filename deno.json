@@ -2,7 +2,7 @@
   "nodeModulesDir": "auto",
   "tasks": {
     "dev": "deno run --allow-net --allow-read --allow-write --allow-run --allow-env --allow-ffi --allow-sys src/server.ts",
-    "check": "deno check src/server.ts scripts/build.ts tests/runtime.test.ts tests/dom-core.test.ts tests/style-pipeline.test.ts tests/package-manager.test.ts && deno check --config deno.client.json src/client/main.ts",
+    "check": "deno check src/server.ts scripts/build.ts src/app-kernel/browser.ts src/app-kernel/standalone-server.ts tests/runtime.test.ts tests/dom-core.test.ts tests/style-pipeline.test.ts tests/package-manager.test.ts tests/app-builder.test.ts && deno check --config deno.client.json src/client/main.ts src/app-kernel/browser.ts",
     "build": "deno task check && deno run --allow-read --allow-write --allow-env scripts/build.ts",
     "start": "deno run --allow-net --allow-read --allow-write --allow-run --allow-env --allow-ffi --allow-sys src/server.ts --dist",
     "test": "deno test --allow-read --allow-write --allow-env --allow-run --allow-ffi --allow-sys tests"
