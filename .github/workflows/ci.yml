@@ -10,54 +10,13 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   check-test-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # BEGIN EXPRESSION BOOTSTRAP
-      - name: Apply expression integration branch patch
-        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/feature/expression-engine')
-        shell: bash
-        run: |
-          if [ ! -f scripts/patch-expression-integration.py ]; then
-            echo "Expression integration patch already applied."
-            exit 0
-          fi
-          python3 scripts/patch-expression-integration.py
-          python3 - <<'PY'
-          from pathlib import Path
-
-          expression = Path('src/client/expression.ts')
-          source = expression.read_text(encoding='utf-8')
-          unreachable = '''    case "&&":
-    case "||":
-    case "??": throw new Error(`Internal expression evaluator error for ${node.operator}.`);
-'''
-          if unreachable not in source:
-              raise SystemExit('expression evaluator logical cases not found')
-          expression.write_text(source.replace(unreachable, '', 1), encoding='utf-8')
-
-          ci = Path('.github/workflows/ci.yml')
-          workflow = ci.read_text(encoding='utf-8')
-          start = workflow.index('      # BEGIN EXPRESSION BOOTSTRAP\n')
-          end_marker = '      # END EXPRESSION BOOTSTRAP\n'
-          end = workflow.index(end_marker, start) + len(end_marker)
-          workflow = workflow[:start] + workflow[end:]
-          workflow = workflow.replace('permissions:\n  contents: write\n', 'permissions:\n  contents: read\n', 1)
-          ci.write_text(workflow, encoding='utf-8')
-          PY
-          rm -f .github/workflows/expression-integration-patch.yml scripts/patch-expression-integration.py
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "Complete expression editor runtime and persistence integration"
-            git push origin HEAD:feature/expression-engine
-          fi
-      # END EXPRESSION BOOTSTRAP
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
@@ -101,7 +60,7 @@ jobs:
           grep -F '"id":"better-sqlite3"' /tmp/packages.json
           grep -F '"id":"tailwind"' /tmp/packages.json
 
-          # Condition steps must survive Studio manifest save/load without changing v3.
+          # Condition and expression bindings must survive Studio save/load without changing v3.
           python3 - <<'PY'
           import copy, json
           from urllib.request import Request, urlopen
@@ -119,6 +78,7 @@ jobs:
               },
               'inputs': {
                   'value': {'kind': 'literal', 'value': 7},
+                  'computed': {'kind': 'expression', 'source': '@event.value + @board.Step * 2'},
               },
           }]
 
@@ -138,6 +98,7 @@ jobs:
           assert condition['id'] == 'ci-condition-persistence'
           assert condition['condition']['name'] == 'ciProbe'
           assert condition['inputs']['value'] == {'kind': 'literal', 'value': 7}
+          assert condition['inputs']['computed'] == {'kind': 'expression', 'source': '@event.value + @board.Step * 2'}
           with urlopen('http://127.0.0.1:8000/api/projects/calculator-modular-demo', timeout=10) as response:
               reloaded = json.loads(response.read().decode())
           assert reloaded['manifest']['rules'][0]['conditions'][0] == condition
@@ -155,6 +116,7 @@ jobs:
           body = urlopen(run['url'], timeout=8).read().decode()
           assert '/app-kernel/browser.js' in body
           PY
+          test -f workspace/builds/calculator-modular-demo/public/client/expression.js
 
           # Phone Book template + package policy.
           grep -F "Phone Book · SQLite Demo" /tmp/projects.json
