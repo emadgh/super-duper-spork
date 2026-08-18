@@ -17,6 +17,7 @@ export default defineObject({
   events: {
     createRequested: { outputs: { contact: { type: "any" } } },
     updateRequested: { outputs: { id: { type: "number" }, contact: { type: "any" } } },
+    cancelRequested: {},
   },
   actions: {
     edit: {
@@ -104,7 +105,7 @@ export default defineObject({
 
         <div class="flex gap-2 pt-1">
           <button type="submit" class="flex-1 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-sky-400">{editingId > 0 ? "Save changes" : "Add contact"}</button>
-          {editingId > 0 ? <button type="button" class="rounded-xl border border-white/10 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/5" onClick={() => emit("updateRequested", { id: 0, cancel: true })}>Cancel</button> : null}
+          {editingId > 0 ? <button type="button" class="rounded-xl border border-white/10 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/5" onClick={() => emit("cancelRequested")}>Cancel</button> : null}
         </div>
       </form>
     );
