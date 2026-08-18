@@ -30,6 +30,13 @@ export interface ObjectActionDefinition {
   run: (context: ActionContext, inputs: Record<string, unknown>) => Record<string, unknown> | void;
 }
 
+export interface ObjectConditionDefinition {
+  label?: string;
+  description?: string;
+  inputs?: Record<string, PortDefinition>;
+  test: (context: ActionContext, inputs: Record<string, unknown>) => boolean;
+}
+
 export interface RenderContext<State extends Record<string, unknown> = Record<string, unknown>> {
   state: State;
   props: Readonly<Record<string, unknown>>;
@@ -56,6 +63,7 @@ export interface ObjectDefinition {
   description?: string;
   state?: Record<string, unknown>;
   events?: Record<string, ObjectEventDefinition>;
+  conditions?: Record<string, ObjectConditionDefinition>;
   actions?: Record<string, ObjectActionDefinition>;
   /** Preferred declarative UI contract. TSX compiles to DomCore VNodes. */
   render?: (context: RenderContext) => DomChild;
@@ -102,6 +110,12 @@ export type ValueBinding =
   | { kind: "event"; path: string }
   | { kind: "output"; stepId: string; name: string };
 
+export interface ConditionStep {
+  id: string;
+  condition: EventEndpoint;
+  inputs: Record<string, ValueBinding>;
+}
+
 export interface ActionStep {
   id: string;
   action: EventEndpoint;
@@ -112,6 +126,8 @@ export interface ActionStep {
 export interface EventRule {
   id: string;
   event: EventEndpoint;
+  /** Missing/empty conditions means the rule is unconditional for v3 compatibility. */
+  conditions?: ConditionStep[];
   actions: ActionStep[];
 }
 
