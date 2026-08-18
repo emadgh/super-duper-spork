@@ -52,10 +52,11 @@ export function styleLinks(manifest: ProjectBuildManifest): string[] {
 export async function runBuildProviders(
   projectRoot: URL,
   outputRoot: URL,
-  manifest = await readBuildManifest(projectRoot),
+  manifest?: ProjectBuildManifest,
 ): Promise<BuildProviderResult[]> {
+  const resolvedManifest = manifest ?? await readBuildManifest(projectRoot);
   const results: BuildProviderResult[] = [];
-  for (const entry of manifest.styles) {
+  for (const entry of resolvedManifest.styles) {
     switch (entry.provider) {
       case "tailwind":
         results.push(await runTailwind(projectRoot, outputRoot, entry));
