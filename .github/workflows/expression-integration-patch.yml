@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - feature/expression-engine
-    paths:
-      - .github/workflows/expression-integration-patch.yml
   pull_request:
     branches:
       - main
