@@ -64,3 +64,5 @@ Expression source length, token count, parser complexity, and evaluation depth a
 ## Rule semantics
 
 Condition expressions run before Actions because Conditions are evaluated first. Therefore `@output` is normally useful in Action inputs, where it can reference an earlier Action step. An output does not exist before its Action has executed.
+
+The same expression implementation is shipped with Studio preview and standalone builds so rule behavior is consistent after export.
