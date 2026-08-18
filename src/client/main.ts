@@ -4,11 +4,13 @@ import { evaluateObjectFile } from "./compiler.ts";
 import type {
   ActionStep,
   ActionTemplateSummary,
+  ConditionStep,
   BlackboardEntry,
   EventEndpoint,
   EventRule,
   LoadedProject,
   ObjectActionDefinition,
+  ObjectConditionDefinition,
   ObjectDefinition,
   ObjectEventDefinition,
   PortDefinition,
@@ -50,6 +52,7 @@ const saveButton = required<HTMLButtonElement>("#save-object");
 const revealObjectButton = required<HTMLButtonElement>("#reveal-object");
 const moveObjectButton = required<HTMLButtonElement>("#move-object");
 const eventsSelect = required<HTMLSelectElement>("#event-select");
+const conditionsSelect = required<HTMLSelectElement>("#condition-select");
 const actionsSelect = required<HTMLSelectElement>("#action-select");
 const connectButton = required<HTMLButtonElement>("#connect");
 const ruleList = required<HTMLElement>("#rule-list");
@@ -521,6 +524,7 @@ function renderApiSummary(): void {
 
   apiSummary.append(apiGroup("Object", [definition.name]));
   apiSummary.append(apiGroup("Events", Object.keys(definition.events ?? {}), "event"));
+  apiSummary.append(apiGroup("Conditions", Object.keys(definition.conditions ?? {}), "condition"));
   apiSummary.append(apiGroup("Actions", Object.keys(definition.actions ?? {}), "action"));
 }
 
@@ -555,6 +559,14 @@ function renderEventOptions(): void {
     label: `${item.endpoint.instanceId} · ${item.definition.label ?? item.endpoint.name}`,
   })), "No events available");
 
+  conditionsSelect.replaceChildren(option("", "No condition"));
+  for (const item of conditionCatalog()) {
+    conditionsSelect.append(option(
+      endpointValue(item.endpoint),
+      `${item.endpoint.instanceId} · ${item.definition.label ?? item.endpoint.name}`,
+    ));
+  }
+
   fillEndpointSelect(actionsSelect, actionCatalog().map((item) => ({
     value: endpointValue(item.endpoint),
     label: `${item.endpoint.instanceId} · ${item.definition.label ?? item.endpoint.name}`,
@@ -568,7 +580,10 @@ async function addRuleFromToolbar(): Promise<void> {
   const event = parseEndpointValue(eventsSelect.value);
   const action = parseEndpointValue(actionsSelect.value);
   const step = createActionStep(action);
-  project.manifest.rules.push({ id: crypto.randomUUID(), event, actions: [step] });
+  const conditions = conditionsSelect.value
+    ? [createConditionStep(parseEndpointValue(conditionsSelect.value))]
+    : undefined;
+  project.manifest.rules.push({ id: crypto.randomUUID(), event, ...(conditions ? { conditions } : {}), actions: [step] });
   await persistManifest();
   renderRules();
   renderDiagram();
@@ -603,9 +618,32 @@ function renderRuleCard(rule: EventRule, index: number): HTMLElement {
   deleteRule.addEventListener("click", () => void removeRule(rule.id));
   head.append(deleteRule);
 
+  const conditionsHost = document.createElement("div");
+  conditionsHost.className = "rule-conditions";
+  (rule.conditions ?? []).forEach((step, stepIndex) => conditionsHost.append(renderConditionStep(rule, step, stepIndex)));
+
+  const addConditionRow = document.createElement("div");
+  addConditionRow.className = "rule-add-condition";
+  const conditionSelect = document.createElement("select");
+  fillEndpointSelect(conditionSelect, conditionCatalog().map((item) => ({
+    value: endpointValue(item.endpoint),
+    label: `${item.endpoint.instanceId} · ${item.definition.label ?? item.endpoint.name}`,
+  })), "No conditions available");
+  const addCondition = document.createElement("button");
+  addCondition.className = "mini-button";
+  addCondition.textContent = "+ Add condition";
+  addCondition.disabled = !conditionSelect.value;
+  addCondition.addEventListener("click", () => {
+    if (!conditionSelect.value) return;
+    rule.conditions ??= [];
+    rule.conditions.push(createConditionStep(parseEndpointValue(conditionSelect.value)));
+    void persistManifest().then(renderRules);
+  });
+  addConditionRow.append(conditionSelect, addCondition);
+  conditionsHost.append(addConditionRow);
+
   const actionsHost = document.createElement("div");
   actionsHost.className = "rule-actions";
-
   rule.actions.forEach((step, stepIndex) => actionsHost.append(renderActionStep(rule, step, stepIndex)));
 
   const addRow = document.createElement("div");
@@ -627,8 +665,121 @@ function renderRuleCard(rule: EventRule, index: number): HTMLElement {
   addRow.append(select, add);
   actionsHost.append(addRow);
 
-  card.append(head, actionsHost);
+  card.append(head, conditionsHost, actionsHost);
   return card;
+}
+
+function renderConditionStep(rule: EventRule, step: ConditionStep, stepIndex: number): HTMLElement {
+  const container = document.createElement("section");
+  container.className = "condition-step";
+  const condition = getConditionDefinition(step.condition);
+
+  const head = document.createElement("div");
+  head.className = "action-head";
+  head.innerHTML = `
+    <span class="step-number">C${String(stepIndex + 1).padStart(2, "0")}</span>
+    <span class="endpoint-chip condition-endpoint">CONDITION&nbsp; ${escapeHtml(step.condition.instanceId)}.${escapeHtml(step.condition.name)}</span>
+    <span class="rule-spacer"></span>
+  `;
+  const remove = document.createElement("button");
+  remove.className = "text-button danger";
+  remove.textContent = "Remove";
+  remove.addEventListener("click", () => {
+    rule.conditions = (rule.conditions ?? []).filter((item) => item.id !== step.id);
+    void persistManifest().then(renderRules);
+  });
+  head.append(remove);
+
+  const ports = document.createElement("div");
+  ports.className = "condition-ports";
+  const inputEntries = Object.entries(condition?.inputs ?? {});
+  if (!inputEntries.length) ports.append(emptyInline("No input ports"));
+  for (const [name, port] of inputEntries) ports.append(renderConditionInputPort(rule, step, name, port));
+
+  container.append(head, ports);
+  return container;
+}
+
+function renderConditionInputPort(rule: EventRule, step: ConditionStep, name: string, port: PortDefinition): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "port-row";
+  row.innerHTML = `<div class="port-name"><span class="port-dot ${port.type}"></span>${escapeHtml(port.label ?? name)}</div>`;
+
+  const editor = document.createElement("div");
+  editor.className = "binding-editor";
+  const kind = document.createElement("select");
+  const kinds: Array<{ value: Exclude<ValueBinding["kind"], "output">; label: string }> = [
+    { value: "literal", label: "Value" },
+    { value: "blackboard", label: "Blackboard" },
+    { value: "state", label: "Object state" },
+    { value: "event", label: "Event output" },
+  ];
+  for (const item of kinds) kind.append(option(item.value, item.label));
+
+  const currentBinding = step.inputs[name];
+  let binding: Exclude<ValueBinding, { kind: "output" }> = currentBinding && currentBinding.kind !== "output"
+    ? currentBinding
+    : { kind: "literal", value: port.default ?? defaultValueForType(port.type) };
+  step.inputs[name] = binding;
+  kind.value = binding.kind;
+
+  const valueHost = document.createElement("span");
+  valueHost.style.minWidth = "0";
+  const applyEditor = () => renderConditionBindingValueEditor(valueHost, rule, port, binding, (next) => {
+    binding = next;
+    step.inputs[name] = next;
+    void persistManifest();
+  });
+  applyEditor();
+
+  kind.addEventListener("change", () => {
+    binding = bindingForConditionKind(kind.value as Exclude<ValueBinding["kind"], "output">, port, rule);
+    step.inputs[name] = binding;
+    applyEditor();
+    void persistManifest();
+  });
+
+  editor.append(kind, valueHost);
+  row.append(editor);
+  return row;
+}
+
+function renderConditionBindingValueEditor(
+  host: HTMLElement,
+  rule: EventRule,
+  port: PortDefinition,
+  binding: Exclude<ValueBinding, { kind: "output" }>,
+  onChange: (binding: Exclude<ValueBinding, { kind: "output" }>) => void,
+): void {
+  host.replaceChildren();
+  if (binding.kind === "literal") {
+    const input = inputForPort(port, binding.value);
+    input.addEventListener("change", () => onChange({ kind: "literal", value: readPortInput(input, port.type) }));
+    host.append(input);
+    return;
+  }
+
+  const select = document.createElement("select");
+  if (binding.kind === "blackboard") {
+    for (const key of matchingBlackboardKeys(port.type)) select.append(option(key, key));
+    select.value = binding.key;
+    select.addEventListener("change", () => onChange({ kind: "blackboard", key: select.value }));
+  } else if (binding.kind === "state") {
+    for (const value of stateBindingOptions(port.type)) select.append(option(`${value.instanceId}|${value.path}`, `${value.instanceId}.${value.path}`));
+    select.value = `${binding.instanceId}|${binding.path}`;
+    select.addEventListener("change", () => {
+      const [instanceId, path] = select.value.split("|");
+      onChange({ kind: "state", instanceId, path });
+    });
+  } else if (binding.kind === "event") {
+    const outputs = Object.entries(getEventDefinition(rule.event)?.outputs ?? {}).filter(([, item]) => portTypesCompatible(port.type, item.type));
+    if (!outputs.length) select.append(option("", "payload"));
+    for (const [name] of outputs) select.append(option(name, name));
+    select.value = binding.path;
+    select.addEventListener("change", () => onChange({ kind: "event", path: select.value }));
+  }
+  if (!select.options.length) select.append(option("", "No compatible source"));
+  host.append(select);
 }
 
 function renderActionStep(rule: EventRule, step: ActionStep, stepIndex: number): HTMLElement {
@@ -877,6 +1028,11 @@ async function renameBlackboardKey(oldKey: string, rawNewKey: string): Promise<v
   project.manifest.blackboard[newKey] = project.manifest.blackboard[oldKey];
   delete project.manifest.blackboard[oldKey];
   for (const rule of project.manifest.rules) {
+    for (const step of rule.conditions ?? []) {
+      for (const [name, binding] of Object.entries(step.inputs)) {
+        if (binding.kind === "blackboard" && binding.key === oldKey) step.inputs[name] = { kind: "blackboard", key: newKey };
+      }
+    }
     for (const step of rule.actions) {
       for (const [name, binding] of Object.entries(step.inputs)) {
         if (binding.kind === "blackboard" && binding.key === oldKey) step.inputs[name] = { kind: "blackboard", key: newKey };
@@ -893,6 +1049,11 @@ async function deleteBlackboardKey(key: string): Promise<void> {
   if (!project || !confirm(`Delete blackboard variable "${key}"?`)) return;
   delete project.manifest.blackboard[key];
   for (const rule of project.manifest.rules) {
+    for (const step of rule.conditions ?? []) {
+      for (const [name, binding] of Object.entries(step.inputs)) {
+        if (binding.kind === "blackboard" && binding.key === key) step.inputs[name] = { kind: "literal", value: 0 };
+      }
+    }
     for (const step of rule.actions) {
       for (const [name, binding] of Object.entries(step.inputs)) {
         if (binding.kind === "blackboard" && binding.key === key) step.inputs[name] = { kind: "literal", value: 0 };
@@ -988,7 +1149,7 @@ function appendTrace(trace: RuntimeTrace): void {
 function renderTrace(): void {
   traceList.replaceChildren();
   if (!traceRows.length) {
-    traceList.append(emptyInline("Run the project to inspect events and actions."));
+    traceList.append(emptyInline("Run the project to inspect events, conditions and actions."));
     return;
   }
   for (const trace of traceRows) {
@@ -1159,6 +1320,18 @@ function eventCatalog(): Array<{ endpoint: EventEndpoint; definition: ObjectEven
   return result;
 }
 
+function conditionCatalog(): Array<{ endpoint: EventEndpoint; definition: ObjectConditionDefinition }> {
+  if (!project) return [];
+  const result: Array<{ endpoint: EventEndpoint; definition: ObjectConditionDefinition }> = [];
+  for (const instance of project.manifest.instances) {
+    const definition = definitions.get(instance.objectFile);
+    for (const [name, condition] of Object.entries(definition?.conditions ?? {})) {
+      result.push({ endpoint: { instanceId: instance.id, name }, definition: condition });
+    }
+  }
+  return result;
+}
+
 function actionCatalog(): Array<{ endpoint: EventEndpoint; definition: ObjectActionDefinition }> {
   if (!project) return [];
   const result: Array<{ endpoint: EventEndpoint; definition: ObjectActionDefinition }> = [];
@@ -1180,8 +1353,19 @@ function getEventDefinition(endpoint: EventEndpoint): ObjectEventDefinition | un
   return getDefinitionForInstance(endpoint.instanceId)?.events?.[endpoint.name];
 }
 
+function getConditionDefinition(endpoint: EventEndpoint): ObjectConditionDefinition | undefined {
+  return getDefinitionForInstance(endpoint.instanceId)?.conditions?.[endpoint.name];
+}
+
 function getActionDefinition(endpoint: EventEndpoint): ObjectActionDefinition | undefined {
   return getDefinitionForInstance(endpoint.instanceId)?.actions?.[endpoint.name];
+}
+
+function createConditionStep(endpoint: EventEndpoint): ConditionStep {
+  const condition = getConditionDefinition(endpoint);
+  const inputs: Record<string, ValueBinding> = {};
+  for (const [name, port] of Object.entries(condition?.inputs ?? {})) inputs[name] = defaultBinding(port);
+  return { id: crypto.randomUUID(), condition: endpoint, inputs };
 }
 
 function createActionStep(endpoint: EventEndpoint): ActionStep {
@@ -1209,6 +1393,21 @@ function bindingForKind(kind: ValueBinding["kind"], port: PortDefinition, rule: 
   }
   const first = previousOutputOptions(rule, step, port.type)[0];
   return { kind: "output", stepId: first?.stepId ?? "", name: first?.name ?? "" };
+}
+
+function bindingForConditionKind(
+  kind: Exclude<ValueBinding["kind"], "output">,
+  port: PortDefinition,
+  rule: EventRule,
+): Exclude<ValueBinding, { kind: "output" }> {
+  if (kind === "literal") return defaultBinding(port) as Exclude<ValueBinding, { kind: "output" }>;
+  if (kind === "blackboard") return { kind, key: matchingBlackboardKeys(port.type)[0] ?? "" };
+  if (kind === "state") {
+    const first = stateBindingOptions(port.type)[0];
+    return { kind, instanceId: first?.instanceId ?? "", path: first?.path ?? "" };
+  }
+  const outputs = Object.entries(getEventDefinition(rule.event)?.outputs ?? {}).filter(([, def]) => portTypesCompatible(port.type, def.type));
+  return { kind: "event", path: outputs[0]?.[0] ?? "" };
 }
 
 function matchingBlackboardKeys(type: PortType): string[] {
@@ -1289,7 +1488,7 @@ function coerceValue(value: unknown, type: PortType): unknown {
 
 interface DiagramNode {
   id: string;
-  type: "event" | "action" | "blackboard";
+  type: "event" | "condition" | "action" | "blackboard";
   x: number;
   y: number;
   width: number;
@@ -1358,10 +1557,38 @@ function renderDiagram(): void {
     });
 
     let previousNodeId = eventId;
+    const conditions = rule.conditions ?? [];
+    conditions.forEach((step, stepIndex) => {
+      const condition = getConditionDefinition(step.condition);
+      const nodeId = `condition:${step.id}`;
+      const x = 330 + stepIndex * 310;
+      const portRows = Math.max(Object.keys(condition?.inputs ?? {}).length, 1);
+      nodes.push({
+        id: nodeId,
+        type: "condition",
+        x,
+        y: rowY,
+        width: 250,
+        height: 86 + Math.min(portRows, 5) * 20,
+        title: `${step.condition.instanceId}.${step.condition.name}`,
+        subtitle: condition?.label ?? "Condition",
+        inputs: Object.keys(condition?.inputs ?? {}),
+        outputs: [],
+      });
+      edges.push({ from: previousNodeId, to: nodeId, kind: "flow" });
+      previousNodeId = nodeId;
+      for (const [inputName, binding] of Object.entries(step.inputs)) {
+        if (binding.kind === "event") {
+          edges.push({ from: eventId, to: nodeId, kind: "data", label: binding.path ? `${binding.path} → ${inputName}` : inputName });
+        }
+      }
+    });
+
+    const conditionCount = conditions.length;
     rule.actions.forEach((step, stepIndex) => {
       const action = getActionDefinition(step.action);
       const nodeId = `action:${step.id}`;
-      const x = 330 + stepIndex * 310;
+      const x = 330 + (conditionCount + stepIndex) * 310;
       const portRows = Math.max(Object.keys(action?.inputs ?? {}).length, Object.keys(action?.outputs ?? {}).length, 1);
       const height = 86 + Math.min(portRows, 5) * 20;
       nodes.push({
@@ -1395,7 +1622,7 @@ function renderDiagram(): void {
           boardId = `board:${mapping.blackboardKey}`;
           boardNodeIds.set(mapping.blackboardKey, boardId);
           const boardIndex = boardNodeIds.size - 1;
-          const boardX = 330 + Math.max(rule.actions.length, 1) * 310;
+          const boardX = 330 + Math.max(conditionCount + rule.actions.length, 1) * 310;
           nodes.push({
             id: boardId,
             type: "blackboard",

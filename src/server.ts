@@ -30,6 +30,12 @@ type ValueBinding =
   | { kind: "event"; path: string }
   | { kind: "output"; stepId: string; name: string };
 
+interface ConditionStep {
+  id: string;
+  condition: EventEndpoint;
+  inputs: Record<string, ValueBinding>;
+}
+
 interface ActionStep {
   id: string;
   action: EventEndpoint;
@@ -40,6 +46,7 @@ interface ActionStep {
 interface EventRule {
   id: string;
   event: EventEndpoint;
+  conditions?: ConditionStep[];
   actions: ActionStep[];
 }
 
@@ -962,6 +969,7 @@ function sanitizeManifest(input: ProjectManifest, current: ProjectManifest): Pro
   const blackboard = sanitizeBlackboard(input.blackboard);
   const rules = sanitizeRules(input.rules).filter((rule) => {
     if (!validInstances.has(rule.event.instanceId)) return false;
+    if (!(rule.conditions ?? []).every((step) => validInstances.has(step.condition.instanceId))) return false;
     return rule.actions.every((step) => validInstances.has(step.action.instanceId));
   });
 
@@ -999,6 +1007,18 @@ function sanitizeRules(value: unknown): EventRule[] {
     const rule = rawRule as Partial<EventRule>;
     if (!isEndpoint(rule.event)) continue;
 
+    const conditions: ConditionStep[] = [];
+    for (const rawStep of Array.isArray(rule.conditions) ? rule.conditions : []) {
+      if (!rawStep || typeof rawStep !== "object") continue;
+      const step = rawStep as Partial<ConditionStep>;
+      if (!isEndpoint(step.condition)) continue;
+      conditions.push({
+        id: typeof step.id === "string" && step.id ? step.id : crypto.randomUUID(),
+        condition: { instanceId: step.condition.instanceId, name: step.condition.name },
+        inputs: sanitizeBindings(step.inputs),
+      });
+    }
+
     const actions: ActionStep[] = [];
     for (const rawStep of Array.isArray(rule.actions) ? rule.actions : []) {
       if (!rawStep || typeof rawStep !== "object") continue;
@@ -1015,6 +1035,7 @@ function sanitizeRules(value: unknown): EventRule[] {
     rules.push({
       id: typeof rule.id === "string" && rule.id ? rule.id : crypto.randomUUID(),
       event: { instanceId: rule.event.instanceId, name: rule.event.name },
+      ...(conditions.length ? { conditions } : {}),
       actions,
     });
   }

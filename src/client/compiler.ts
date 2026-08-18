@@ -30,6 +30,7 @@ function isObjectDefinition(value: unknown): value is ObjectDefinition {
   const candidate = value as Partial<ObjectDefinition>;
   if (typeof candidate.name !== "string" || candidate.name.trim() === "") return false;
   if (candidate.events && typeof candidate.events !== "object") return false;
+  if (candidate.conditions && typeof candidate.conditions !== "object") return false;
   if (candidate.actions && typeof candidate.actions !== "object") return false;
   if (candidate.render && typeof candidate.render !== "function") return false;
   if (candidate.mount && typeof candidate.mount !== "function") return false;

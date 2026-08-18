@@ -59,6 +59,51 @@ jobs:
           grep -F '"id":"typeorm"' /tmp/packages.json
           grep -F '"id":"better-sqlite3"' /tmp/packages.json
           grep -F '"id":"tailwind"' /tmp/packages.json
+
+          # Condition steps must survive Studio manifest save/load without changing v3.
+          python3 - <<'PY'
+          import copy, json
+          from urllib.request import Request, urlopen
+
+          source = json.load(open('/tmp/calculator.json'))
+          original = copy.deepcopy(source['manifest'])
+          probe = copy.deepcopy(original)
+          assert probe['version'] == 3
+          assert probe['rules'] and probe['instances']
+          probe['rules'][0]['conditions'] = [{
+              'id': 'ci-condition-persistence',
+              'condition': {
+                  'instanceId': probe['instances'][0]['id'],
+                  'name': 'ciProbe',
+              },
+              'inputs': {
+                  'value': {'kind': 'literal', 'value': 7},
+              },
+          }]
+
+          def save(manifest):
+              payload = json.dumps({'manifest': manifest}).encode()
+              request = Request(
+                  'http://127.0.0.1:8000/api/projects/calculator-modular-demo',
+                  method='PUT',
+                  data=payload,
+                  headers={'content-type': 'application/json'},
+              )
+              with urlopen(request, timeout=10) as response:
+                  return json.loads(response.read().decode())
+
+          saved = save(probe)
+          condition = saved['manifest']['rules'][0]['conditions'][0]
+          assert condition['id'] == 'ci-condition-persistence'
+          assert condition['condition']['name'] == 'ciProbe'
+          assert condition['inputs']['value'] == {'kind': 'literal', 'value': 7}
+          with urlopen('http://127.0.0.1:8000/api/projects/calculator-modular-demo', timeout=10) as response:
+              reloaded = json.loads(response.read().decode())
+          assert reloaded['manifest']['rules'][0]['conditions'][0] == condition
+          restored = save(original)
+          assert 'conditions' not in restored['manifest']['rules'][0] or restored['manifest']['rules'][0]['conditions'] == []
+          PY
+
           curl -fsS -X POST -H 'content-type: application/json' -d '{}' \
             http://127.0.0.1:8000/api/projects/calculator-modular-demo/run > /tmp/calculator-run.json
           python3 - <<'PY'

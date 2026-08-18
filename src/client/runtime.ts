@@ -2,6 +2,7 @@ import { mountDom } from "./dom-core/index.ts";
 import type {
   ActionStep,
   BlackboardEntry,
+  ConditionStep,
   EventRule,
   MountedObject,
   ObjectDefinition,
@@ -18,7 +19,7 @@ interface RuntimeInstance {
 }
 
 export interface RuntimeTrace {
-  kind: "event" | "action" | "error";
+  kind: "event" | "condition" | "action" | "error";
   label: string;
   detail?: string;
 }
@@ -164,6 +165,22 @@ export class EventRuntime {
 
     for (const rule of matching) {
       const outputs = new Map<string, Record<string, unknown>>();
+      let allowed = true;
+      for (const step of rule.conditions ?? []) {
+        try {
+          if (!this.#runCondition(step, payload, outputs)) {
+            allowed = false;
+            break;
+          }
+        } catch (error) {
+          allowed = false;
+          this.#trace("error", `${step.condition.instanceId}.${step.condition.name}`, errorMessage(error));
+          console.error(error);
+          break;
+        }
+      }
+      if (!allowed) continue;
+
       for (const step of rule.actions) {
         try {
           const result = this.#runAction(step, payload, outputs);
@@ -187,6 +204,36 @@ export class EventRuntime {
 
   getBlackboard(): Record<string, BlackboardEntry> {
     return structuredClone(this.#blackboard);
+  }
+
+  #runCondition(
+    step: ConditionStep,
+    eventPayload: unknown,
+    previousOutputs: Map<string, Record<string, unknown>>,
+  ): boolean {
+    const target = this.#runtimeInstances.get(step.condition.instanceId);
+    if (!target) throw new Error(`Unknown instance: ${step.condition.instanceId}`);
+
+    const condition = target.definition.conditions?.[step.condition.name];
+    if (!condition) throw new Error(`Unknown condition: ${step.condition.instanceId}.${step.condition.name}`);
+
+    const inputs: Record<string, unknown> = {};
+    for (const [name, port] of Object.entries(condition.inputs ?? {})) {
+      const binding = step.inputs[name];
+      inputs[name] = binding ? this.#resolveBinding(binding, eventPayload, previousOutputs) : port.default;
+    }
+
+    const passed = condition.test(
+      {
+        state: target.state,
+        props: target.props,
+        payload: eventPayload,
+      },
+      inputs,
+    ) === true;
+    const inputText = formatInputs(inputs);
+    this.#trace("condition", `${step.condition.instanceId}.${step.condition.name}`, `${passed ? "PASS" : "FAIL"}${inputText ? ` · ${inputText}` : ""}`);
+    return passed;
   }
 
   #runAction(
