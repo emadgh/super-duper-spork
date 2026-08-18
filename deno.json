@@ -1,10 +1,11 @@
 {
+  "nodeModulesDir": "auto",
   "tasks": {
-    "dev": "deno run --allow-net --allow-read --allow-write --allow-run --allow-env src/server.ts",
-    "check": "deno check src/server.ts scripts/build.ts tests/runtime.test.ts && deno check --config deno.client.json src/client/main.ts",
+    "dev": "deno run --allow-net --allow-read --allow-write --allow-run --allow-env --allow-ffi src/server.ts",
+    "check": "deno check src/server.ts scripts/build.ts tests/runtime.test.ts tests/dom-core.test.ts tests/style-pipeline.test.ts && deno check --config deno.client.json src/client/main.ts",
     "build": "deno task check && deno run --allow-read --allow-write --allow-env scripts/build.ts",
-    "start": "deno run --allow-net --allow-read --allow-write --allow-run --allow-env src/server.ts --dist",
-    "test": "deno test tests"
+    "start": "deno run --allow-net --allow-read --allow-write --allow-run --allow-env --allow-ffi src/server.ts --dist",
+    "test": "deno test --allow-ffi tests"
   },
   "compilerOptions": {
     "strict": true
