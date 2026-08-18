@@ -22,6 +22,12 @@ export interface ActionContext<State extends Record<string, unknown> = Record<st
   emit: (eventName: string, payload?: unknown) => void;
 }
 
+export interface ConditionContext<State extends Record<string, unknown> = Record<string, unknown>> {
+  readonly state: Readonly<State>;
+  readonly props: Readonly<Record<string, unknown>>;
+  readonly payload: unknown;
+}
+
 export interface ObjectActionDefinition {
   label?: string;
   description?: string;
@@ -34,7 +40,7 @@ export interface ObjectConditionDefinition {
   label?: string;
   description?: string;
   inputs?: Record<string, PortDefinition>;
-  test: (context: ActionContext, inputs: Record<string, unknown>) => boolean;
+  test: (context: ConditionContext, inputs: Record<string, unknown>) => boolean;
 }
 
 export interface RenderContext<State extends Record<string, unknown> = Record<string, unknown>> {
