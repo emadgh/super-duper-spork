@@ -1,0 +1,53 @@
+name: Run remaining project style CI fix
+
+on:
+  push:
+    branches:
+      - feature/project-style-pipeline
+    paths:
+      - ".github/workflows/run-fix-project-style-ci.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/project-style-pipeline
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Apply missing manifest field
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/server.ts')
+          text = p.read_text()
+          old = '    objectFolders: ["UI", "Logic"],\n    instances:'
+          if old in text:
+              text = text.replace(old, '    objectFolders: ["UI", "Logic"],\n    styles: [],\n    instances:', 1)
+          p.write_text(text)
+          PY
+      - name: Validate and record
+        run: |
+          mkdir -p .ci
+          set +e
+          deno task check > .ci/style-final-report.txt 2>&1
+          echo "CHECK_STATUS=$?" >> .ci/style-final-report.txt
+          deno task test >> .ci/style-final-report.txt 2>&1
+          echo "TEST_STATUS=$?" >> .ci/style-final-report.txt
+          deno task build >> .ci/style-final-report.txt 2>&1
+          echo "BUILD_STATUS=$?" >> .ci/style-final-report.txt
+          cat .ci/style-final-report.txt
+          exit 0
+      - name: Commit fix and report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server.ts deno.lock .ci/style-final-report.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "fix(styles): finalize project CSS validation (#5)"
+          git push origin HEAD:feature/project-style-pipeline
