@@ -6,7 +6,7 @@ Deno.test({
     const command = new Deno.Command(Deno.execPath(), {
       args: [
         "run",
-        "--allow-net=127.0.0.1,localhost",
+        "--allow-net",
         "--allow-read",
         "--allow-write",
         "--allow-run",
