@@ -1,8 +1,0 @@
-Traceback (most recent call last):
-  File "/tmp/apply_styles.py", line 89, in <module>
-    text = must_replace(text, template_fields, template_fields_new, "template manifest styles")
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/apply_styles.py", line 5, in must_replace
-    raise RuntimeError(f"missing patch anchor: {label}")
-RuntimeError: missing patch anchor: template manifest styles
-PATCH_STATUS=1
