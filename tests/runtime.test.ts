@@ -169,13 +169,6 @@ Deno.test("generic calculator key event can drive independent engine and view ob
   assertEquals(runtime.getBlackboard().memory.value, 15);
 });
 
-function assertEquals(actual: unknown, expected: unknown): void {
-  if (!Object.is(actual, expected)) {
-    throw new Error(`Expected ${String(expected)}, got ${String(actual)}`);
-  }
-}
-
-
 Deno.test("instance props are available to actions", () => {
   const definitions = new Map<string, ObjectDefinition>([["Scale.ts", {
     name: "Scale",
@@ -198,3 +191,175 @@ Deno.test("instance props are available to actions", () => {
   runtime.emit("scale1", "go", { value: 3 });
   assertEquals(runtime.getBlackboard().answer.value, 12);
 });
+
+Deno.test("false condition prevents all rule actions", () => {
+  const definitions = conditionDefinitions();
+  const traces: string[] = [];
+  const runtime = new EventRuntime(
+    definitions,
+    [
+      { id: "trigger", objectFile: "Trigger.ts" },
+      { id: "gate", objectFile: "Gate.ts" },
+      { id: "counter", objectFile: "Counter.ts" },
+    ],
+    [{
+      id: "guarded",
+      event: { instanceId: "trigger", name: "clicked" },
+      conditions: [{
+        id: "gate-step",
+        condition: { instanceId: "gate", name: "atLeast" },
+        inputs: {
+          value: { kind: "event", path: "value" },
+          minimum: { kind: "literal", value: 10 },
+        },
+      }],
+      actions: [{ id: "increment", action: { instanceId: "counter", name: "increment" }, inputs: {}, outputs: {} }],
+    }],
+    {},
+    { onTrace: (trace) => traces.push(`${trace.kind}:${trace.detail ?? ""}`) },
+  );
+
+  runtime.emit("trigger", "clicked", { value: 9 });
+
+  assertEquals(runtime.getState("counter")?.value, 0);
+  assert(traces.some((trace) => trace.startsWith("condition:FAIL")));
+});
+
+Deno.test("true condition allows rule actions", () => {
+  const definitions = conditionDefinitions();
+  const runtime = new EventRuntime(
+    definitions,
+    [
+      { id: "trigger", objectFile: "Trigger.ts" },
+      { id: "gate", objectFile: "Gate.ts", props: { enabled: true } },
+      { id: "counter", objectFile: "Counter.ts" },
+    ],
+    [{
+      id: "guarded",
+      event: { instanceId: "trigger", name: "clicked" },
+      conditions: [{
+        id: "enabled",
+        condition: { instanceId: "gate", name: "enabled" },
+        inputs: {},
+      }, {
+        id: "minimum",
+        condition: { instanceId: "gate", name: "atLeast" },
+        inputs: {
+          value: { kind: "event", path: "value" },
+          minimum: { kind: "blackboard", key: "minimum" },
+        },
+      }],
+      actions: [{ id: "increment", action: { instanceId: "counter", name: "increment" }, inputs: {}, outputs: {} }],
+    }],
+    { minimum: { type: "number", value: 10 } },
+  );
+
+  runtime.emit("trigger", "clicked", { value: 12 });
+
+  assertEquals(runtime.getState("counter")?.value, 1);
+});
+
+Deno.test("multiple conditions use AND semantics and stop on first failure", () => {
+  const definitions = conditionDefinitions();
+  const traces: string[] = [];
+  const runtime = new EventRuntime(
+    definitions,
+    [
+      { id: "trigger", objectFile: "Trigger.ts" },
+      { id: "gate", objectFile: "Gate.ts", props: { enabled: false } },
+      { id: "counter", objectFile: "Counter.ts" },
+    ],
+    [{
+      id: "guarded",
+      event: { instanceId: "trigger", name: "clicked" },
+      conditions: [
+        { id: "enabled", condition: { instanceId: "gate", name: "enabled" }, inputs: {} },
+        {
+          id: "minimum",
+          condition: { instanceId: "gate", name: "atLeast" },
+          inputs: {
+            value: { kind: "event", path: "value" },
+            minimum: { kind: "literal", value: 1 },
+          },
+        },
+      ],
+      actions: [{ id: "increment", action: { instanceId: "counter", name: "increment" }, inputs: {}, outputs: {} }],
+    }],
+    {},
+    { onTrace: (trace) => traces.push(`${trace.kind}:${trace.label}:${trace.detail ?? ""}`) },
+  );
+
+  runtime.emit("trigger", "clicked", { value: 100 });
+
+  assertEquals(runtime.getState("counter")?.value, 0);
+  assertEquals(traces.filter((trace) => trace.startsWith("condition:")).length, 1);
+});
+
+Deno.test("legacy rule without conditions stays unconditional", () => {
+  const definitions = conditionDefinitions();
+  const runtime = new EventRuntime(
+    definitions,
+    [
+      { id: "trigger", objectFile: "Trigger.ts" },
+      { id: "counter", objectFile: "Counter.ts" },
+    ],
+    [{
+      id: "legacy",
+      event: { instanceId: "trigger", name: "clicked" },
+      actions: [{ id: "increment", action: { instanceId: "counter", name: "increment" }, inputs: {}, outputs: {} }],
+    }],
+    {},
+  );
+
+  runtime.emit("trigger", "clicked");
+  assertEquals(runtime.getState("counter")?.value, 1);
+});
+
+function conditionDefinitions(): Map<string, ObjectDefinition> {
+  return new Map<string, ObjectDefinition>([
+    ["Trigger.ts", {
+      name: "Trigger",
+      events: { clicked: { outputs: { value: { type: "number" } } } },
+    }],
+    ["Gate.ts", {
+      name: "Gate",
+      conditions: {
+        enabled: {
+          test(context) {
+            return context.props.enabled !== false;
+          },
+        },
+        atLeast: {
+          inputs: {
+            value: { type: "number" },
+            minimum: { type: "number", default: 0 },
+          },
+          test(_context, inputs) {
+            return Number(inputs.value) >= Number(inputs.minimum);
+          },
+        },
+      },
+    }],
+    ["Counter.ts", {
+      name: "Counter",
+      state: { value: 0 },
+      actions: {
+        increment: {
+          run(context) {
+            context.state.value = Number(context.state.value ?? 0) + 1;
+          },
+        },
+      },
+    }],
+  ]);
+}
+
+function assert(condition: unknown, message = "Assertion failed"): asserts condition {
+  if (!condition) throw new Error(message);
+}
+
+function assertEquals(actual: unknown, expected: unknown): void {
+  if (!Object.is(actual, expected)) {
+    throw new Error(`Expected ${String(expected)}, got ${String(actual)}`);
+  }
+}
