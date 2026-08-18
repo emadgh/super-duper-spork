@@ -3,9 +3,9 @@
   "id": "template",
   "name": "Calculator · Modular Demo",
   "objects": [
-    "UI/CalculatorShell.ts",
-    "UI/CalculatorDisplay.ts",
-    "UI/CalculatorKey.ts",
+    "UI/CalculatorShell.tsx",
+    "UI/CalculatorDisplay.tsx",
+    "UI/CalculatorKey.tsx",
     "Logic/Input/Digit.ts",
     "Logic/Input/Decimal.ts",
     "Logic/Input/Backspace.ts",
@@ -30,11 +30,11 @@
   "instances": [
     {
       "id": "shell",
-      "objectFile": "UI/CalculatorShell.ts"
+      "objectFile": "UI/CalculatorShell.tsx"
     },
     {
       "id": "displayView",
-      "objectFile": "UI/CalculatorDisplay.ts",
+      "objectFile": "UI/CalculatorDisplay.tsx",
       "parent": {
         "instanceId": "shell",
         "slot": "display"
@@ -94,7 +94,7 @@
     },
     {
       "id": "key_mc",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "MC",
         "key": "MC",
@@ -108,7 +108,7 @@
     },
     {
       "id": "key_mr",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "MR",
         "key": "MR",
@@ -122,7 +122,7 @@
     },
     {
       "id": "key_mplus",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "M+",
         "key": "M+",
@@ -136,7 +136,7 @@
     },
     {
       "id": "key_mminus",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "M-",
         "key": "M-",
@@ -150,7 +150,7 @@
     },
     {
       "id": "key_clear",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "C",
         "key": "C",
@@ -164,7 +164,7 @@
     },
     {
       "id": "key_ce",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "CE",
         "key": "CE",
@@ -178,7 +178,7 @@
     },
     {
       "id": "key_back",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "⌫",
         "key": "BACK",
@@ -192,7 +192,7 @@
     },
     {
       "id": "key_divide",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "÷",
         "key": "DIV",
@@ -206,7 +206,7 @@
     },
     {
       "id": "key_7",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "7",
         "key": "7",
@@ -220,7 +220,7 @@
     },
     {
       "id": "key_8",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "8",
         "key": "8",
@@ -234,7 +234,7 @@
     },
     {
       "id": "key_9",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "9",
         "key": "9",
@@ -248,7 +248,7 @@
     },
     {
       "id": "key_multiply",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "×",
         "key": "MUL",
@@ -262,7 +262,7 @@
     },
     {
       "id": "key_4",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "4",
         "key": "4",
@@ -276,7 +276,7 @@
     },
     {
       "id": "key_5",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "5",
         "key": "5",
@@ -290,7 +290,7 @@
     },
     {
       "id": "key_6",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "6",
         "key": "6",
@@ -304,7 +304,7 @@
     },
     {
       "id": "key_subtract",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "−",
         "key": "SUB",
@@ -318,7 +318,7 @@
     },
     {
       "id": "key_1",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "1",
         "key": "1",
@@ -332,7 +332,7 @@
     },
     {
       "id": "key_2",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "2",
         "key": "2",
@@ -346,7 +346,7 @@
     },
     {
       "id": "key_3",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "3",
         "key": "3",
@@ -360,7 +360,7 @@
     },
     {
       "id": "key_add",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "+",
         "key": "ADD",
@@ -374,7 +374,7 @@
     },
     {
       "id": "key_0",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "0",
         "key": "0",
@@ -388,7 +388,7 @@
     },
     {
       "id": "key_decimal",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": ".",
         "key": "DEC",
@@ -402,7 +402,7 @@
     },
     {
       "id": "key_equals",
-      "objectFile": "UI/CalculatorKey.ts",
+      "objectFile": "UI/CalculatorKey.tsx",
       "props": {
         "label": "=",
         "key": "EQUALS",
@@ -2592,5 +2592,8 @@
       ]
     }
   ],
-  "updatedAt": "template"
+  "updatedAt": "template",
+  "styles": [
+    "calculator.css"
+  ]
 }
