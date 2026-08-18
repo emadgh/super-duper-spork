@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "nodeModulesDir": "auto",
+  "packages": [
+    {
+      "id": "typeorm",
+      "alias": "typeorm",
+      "specifier": "npm:typeorm@1.1.0",
+      "role": "runtime",
+      "permissions": { "envAll": true }
+    },
+    {
+      "id": "reflect-metadata",
+      "alias": "reflect-metadata",
+      "specifier": "npm:reflect-metadata@0.2.2",
+      "role": "runtime"
+    },
+    {
+      "id": "better-sqlite3",
+      "alias": "better-sqlite3",
+      "specifier": "npm:better-sqlite3@13.0.2",
+      "role": "runtime",
+      "native": true,
+      "allowScripts": ["npm:better-sqlite3"],
+      "permissions": { "ffi": true, "sys": ["cpus", "hostname", "networkInterfaces"] }
+    },
+    {
+      "id": "tailwindcss",
+      "alias": "tailwindcss",
+      "specifier": "npm:tailwindcss@4.3.3",
+      "role": "build"
+    },
+    {
+      "id": "tailwindcss-cli",
+      "alias": "@tailwindcss/cli",
+      "specifier": "npm:@tailwindcss/cli@4.3.3",
+      "role": "build"
+    }
+  ]
+}

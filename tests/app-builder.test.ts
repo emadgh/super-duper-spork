@@ -29,7 +29,7 @@ Deno.test("standalone app builder emits an independent runnable project", async 
       styles: [],
       packages: {
         manifest: { version: 1, nodeModulesDir: "none", packages: [] },
-        effectivePermissions: {},
+        effectivePermissions: { envAll: true },
       },
     };
 
@@ -43,6 +43,8 @@ Deno.test("standalone app builder emits an independent runnable project", async 
     const config = JSON.parse(await Deno.readTextFile(new URL("deno.json", output)));
     assert(typeof config.tasks.start === "string");
     assert(config.tasks.start.includes("kernel/standalone-server.ts"));
+    assert(config.tasks.start.includes(" --allow-env "));
+    assert(!config.tasks.start.includes("--allow-env=PORT"));
     const html = await Deno.readTextFile(new URL("public/index.html", output));
     assert(html.includes("/app-kernel/browser.js"));
     assert(html.includes("test-app"));

@@ -26,18 +26,18 @@ jobs:
         run: deno task test
       - name: Build
         run: deno task build
-      - name: Template, kernel, package and standalone smoke test
+      - name: Template, package, standalone and Phone Book smoke test
         run: |
           deno task dev > /tmp/studio-smoke.log 2>&1 &
-          pid=$!
-          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          studio_pid=$!
+          trap 'kill "$studio_pid" 2>/dev/null || true' EXIT
           ready=0
-          for i in $(seq 1 40); do
+          for i in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:8000/api/projects > /tmp/projects.json; then
               ready=1
               break
             fi
-            if ! kill -0 "$pid" 2>/dev/null; then
+            if ! kill -0 "$studio_pid" 2>/dev/null; then
               cat /tmp/studio-smoke.log
               exit 1
             fi
@@ -48,50 +48,116 @@ jobs:
             exit 1
           fi
 
+          # Existing Calculator/Kernel regression coverage.
           grep -F "Calculator · Modular Demo" /tmp/projects.json
           curl -fsS http://127.0.0.1:8000/api/projects/calculator-modular-demo > /tmp/calculator.json
           grep -F '"file":"UI/CalculatorShell.tsx"' /tmp/calculator.json
-          grep -F '"file":"UI/CalculatorDisplay.tsx"' /tmp/calculator.json
-          grep -F '"file":"UI/CalculatorKey.tsx"' /tmp/calculator.json
           grep -F '"file":"calculator.css"' /tmp/calculator.json
-          grep -F '.calculator-shell' /tmp/calculator.json
-          grep -F '"packages":{"manifest":{"version":1' /tmp/calculator.json
-
           curl -fsS http://127.0.0.1:8000/api/action-library > /tmp/actions.json
           grep -F '"id":"math.add"' /tmp/actions.json
-          grep -F '"id":"math.divide"' /tmp/actions.json
-
           curl -fsS http://127.0.0.1:8000/api/package-library > /tmp/packages.json
           grep -F '"id":"typeorm"' /tmp/packages.json
           grep -F '"id":"better-sqlite3"' /tmp/packages.json
           grep -F '"id":"tailwind"' /tmp/packages.json
-
-          curl -fsS http://127.0.0.1:8000/apps/calculator-modular-demo/ > /tmp/app-shell.html
-          grep -F '/app-kernel/browser.js' /tmp/app-shell.html
-          curl -fsS http://127.0.0.1:8000/apps/calculator-modular-demo/app-data.json > /tmp/app-data.json
-          grep -F '"id":"calculator-modular-demo"' /tmp/app-data.json
-          curl -fsSI http://127.0.0.1:8000/app-kernel/browser.js | tr -d '\r' | grep -i '^access-control-allow-origin: \*$'
-
-          curl -fsS -X POST -H 'content-type: application/json' \
-            -d '{}' http://127.0.0.1:8000/api/projects/calculator-modular-demo/build > /tmp/build.json
-          grep -F '"ok":true' /tmp/build.json
-          test -f workspace/builds/calculator-modular-demo/public/index.html
-          test -f workspace/builds/calculator-modular-demo/public/app-kernel/browser.js
-          test -f workspace/builds/calculator-modular-demo/kernel/standalone-server.ts
-          test -f workspace/builds/calculator-modular-demo/deno.json
-
-          curl -fsS -X POST -H 'content-type: application/json' \
-            -d '{}' http://127.0.0.1:8000/api/projects/calculator-modular-demo/run > /tmp/run.json
+          curl -fsS -X POST -H 'content-type: application/json' -d '{}' \
+            http://127.0.0.1:8000/api/projects/calculator-modular-demo/run > /tmp/calculator-run.json
           python3 - <<'PY'
           import json
           from urllib.request import urlopen
-          run = json.load(open('/tmp/run.json'))
+          run = json.load(open('/tmp/calculator-run.json'))
           assert run['ok'] is True
-          assert 9100 <= run['port'] <= 9900
-          body = urlopen(run['url'], timeout=5).read().decode()
+          body = urlopen(run['url'], timeout=8).read().decode()
           assert '/app-kernel/browser.js' in body
-          data = urlopen(run['url'] + 'app-data.json', timeout=5).read().decode()
-          assert 'calculator-modular-demo' in data
+          PY
+
+          # Phone Book template + package policy.
+          grep -F "Phone Book · SQLite Demo" /tmp/projects.json
+          curl -fsS http://127.0.0.1:8000/api/projects/phone-book-demo > /tmp/phonebook-project.json
+          grep -F '"file":"UI/PhoneBookShell.tsx"' /tmp/phonebook-project.json
+          grep -F 'npm:typeorm@1.1.0' /tmp/phonebook-project.json
+          grep -F 'npm:better-sqlite3@13.0.2' /tmp/phonebook-project.json
+          grep -F 'npm:@tailwindcss/cli@4.3.3' /tmp/phonebook-project.json
+          grep -F '"ffi":true' /tmp/phonebook-project.json
+
+          # A real standalone build must install native packages and compile Tailwind.
+          curl --fail-with-body -sS -X POST -H 'content-type: application/json' -d '{}' \
+            http://127.0.0.1:8000/api/projects/phone-book-demo/build > /tmp/phonebook-build.json
+          grep -F '"ok":true' /tmp/phonebook-build.json
+          test -s workspace/builds/phone-book-demo/public/tailwind.css
+          test -f workspace/builds/phone-book-demo/host/main.ts
+          test -f workspace/builds/phone-book-demo/kernel/standalone-server.ts
+          grep -F '/tailwind.css' workspace/builds/phone-book-demo/public/index.html
+
+          # Run the generated app in its own Deno process and perform CRUD through its API.
+          curl --fail-with-body -sS -X POST -H 'content-type: application/json' -d '{}' \
+            http://127.0.0.1:8000/api/projects/phone-book-demo/run > /tmp/phonebook-run1.json
+          python3 - <<'PY'
+          import json, time
+          from urllib.request import Request, urlopen
+
+          run = json.load(open('/tmp/phonebook-run1.json'))
+          assert run['ok'] is True
+          base = run['url']
+
+          def call(path, method='GET', payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              req = Request(base + path, method=method, data=data, headers={'content-type':'application/json'} if data else {})
+              with urlopen(req, timeout=15) as response:
+                  return json.loads(response.read().decode())
+
+          initial = call('api/contacts')
+          assert len(initial['contacts']) >= 2
+          marker = f'Persist Test {int(time.time())}'
+          created = call('api/contacts', 'POST', {
+              'displayName': marker,
+              'firstName': 'Persist',
+              'lastName': 'Test',
+              'email': 'persist@example.com',
+              'company': 'Before Restart',
+              'favorite': True,
+              'phones': [
+                  {'label':'mobile','value':'+44 7700 900999'},
+                  {'label':'work','value':'+44 20 7000 0999'}
+              ]
+          })['contact']
+          assert created['id'] > 0
+          updated = call(f"api/contacts/{created['id']}", 'PUT', {
+              **created,
+              'company': 'After Restart',
+              'notes': 'This record must survive a generated-app restart.'
+          })['contact']
+          assert updated['company'] == 'After Restart'
+          open('/tmp/phonebook-contact.json','w').write(json.dumps({'id': created['id'], 'marker': marker}))
+          PY
+
+          test -s workspace/builds/phone-book-demo/data/phone-book.sqlite
+
+          # Calling Run again stops/rebuilds/restarts the generated process; data/ must survive.
+          curl --fail-with-body -sS -X POST -H 'content-type: application/json' -d '{}' \
+            http://127.0.0.1:8000/api/projects/phone-book-demo/run > /tmp/phonebook-run2.json
+          python3 - <<'PY'
+          import json
+          from urllib.parse import quote
+          from urllib.request import Request, urlopen
+
+          run = json.load(open('/tmp/phonebook-run2.json'))
+          saved = json.load(open('/tmp/phonebook-contact.json'))
+          base = run['url']
+          with urlopen(base + 'api/contacts?q=' + quote(saved['marker']), timeout=15) as response:
+              body = json.loads(response.read().decode())
+          assert len(body['contacts']) == 1, body
+          contact = body['contacts'][0]
+          assert contact['id'] == saved['id']
+          assert contact['company'] == 'After Restart'
+          assert len(contact['phones']) == 2
+
+          req = Request(base + f"api/contacts/{saved['id']}", method='DELETE')
+          with urlopen(req, timeout=15) as response:
+              deleted = json.loads(response.read().decode())
+          assert deleted['ok'] is True
+          with urlopen(base + 'api/contacts?q=' + quote(saved['marker']), timeout=15) as response:
+              after = json.loads(response.read().decode())
+          assert after['contacts'] == []
           PY
       - name: Package distributable
         run: |

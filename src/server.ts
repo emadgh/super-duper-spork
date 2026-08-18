@@ -2,6 +2,7 @@ import ts from "npm:typescript@5.9.2";
 import { defaultStyleCompiler } from "./server/style-pipeline.ts";
 import { packagePresetSummaries, ProjectPackageManager, sanitizePackageManifest } from "./server/package-manager.ts";
 import { buildStandaloneApp } from "./server/app-builder.ts";
+import { runBuildProviders } from "./server/build-providers.ts";
 
 type PortType = "number" | "string" | "boolean" | "any";
 
@@ -136,9 +137,7 @@ async function handleApi(request: Request, url: URL): Promise<Response> {
     }
 
     if (parts.length === 4 && parts[3] === "build" && request.method === "POST") {
-      const project = await loadProject(projectId);
-      const outputRoot = new URL(`${projectId}/`, BUILDS_DIR);
-      const result = await buildStandaloneApp({ projectId, projectRoot: projectUrl(projectId), outputRoot, project });
+      const result = await prepareStandaloneBuild(projectId);
       return json({ ok: true, projectId, output: decodeURIComponent(result.outputRoot.pathname) });
     }
 
@@ -248,11 +247,21 @@ async function handleApi(request: Request, url: URL): Promise<Response> {
   return json({ error: "Not found." }, 404);
 }
 
-async function runStandaloneProject(projectId: string): Promise<{ ok: true; projectId: string; url: string; port: number }> {
-  await stopStandaloneProject(projectId);
+async function prepareStandaloneBuild(projectId: string): Promise<{ outputRoot: URL }> {
+  const projectRoot = projectUrl(projectId);
+  const packageManager = new ProjectPackageManager(projectRoot);
+  const packageManifest = await packageManager.read();
+  if (packageManifest.packages.length) await packageManager.install();
   const project = await loadProject(projectId);
   const outputRoot = new URL(`${projectId}/`, BUILDS_DIR);
-  await buildStandaloneApp({ projectId, projectRoot: projectUrl(projectId), outputRoot, project });
+  await buildStandaloneApp({ projectId, projectRoot, outputRoot, project });
+  await runBuildProviders(projectRoot, outputRoot);
+  return { outputRoot };
+}
+
+async function runStandaloneProject(projectId: string): Promise<{ ok: true; projectId: string; url: string; port: number }> {
+  await stopStandaloneProject(projectId);
+  const { outputRoot } = await prepareStandaloneBuild(projectId);
 
   const install = new Deno.Command(Deno.execPath(), {
     cwd: outputRoot,
@@ -416,6 +425,7 @@ async function ensureWorkspace(): Promise<void> {
   await ensureCounterDemo();
   await ensureCalculatorDemo();
   await ensureProjectTemplate("calculator-modular-demo", "Calculator · Modular Demo", "calculator-modular");
+  await ensureProjectTemplate("phone-book-demo", "Phone Book · SQLite Demo", "phone-book");
 }
 
 async function ensureCounterDemo(): Promise<void> {
@@ -681,6 +691,35 @@ async function ensureProjectTemplate(projectId: string, name: string, templateNa
   } catch (error) {
     if (!(error instanceof Deno.errors.NotFound)) throw error;
     await packageManager.ensure();
+  }
+  await copyTemplateDirectory(new URL("host/", templateRoot), new URL("host/", projectUrl(projectId)));
+  await copyTemplateDirectory(new URL("build/", templateRoot), new URL("build/", projectUrl(projectId)));
+  await copyTemplateFile(new URL("build.json", templateRoot), new URL("build.json", projectUrl(projectId)));
+}
+
+async function copyTemplateDirectory(source: URL, target: URL): Promise<void> {
+  try {
+    const info = await Deno.stat(source);
+    if (!info.isDirectory) return;
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) return;
+    throw error;
+  }
+  await Deno.mkdir(target, { recursive: true });
+  for await (const entry of Deno.readDir(source)) {
+    const src = new URL(entry.name + (entry.isDirectory ? "/" : ""), source);
+    const dst = new URL(entry.name + (entry.isDirectory ? "/" : ""), target);
+    if (entry.isDirectory) await copyTemplateDirectory(src, dst);
+    else if (entry.isFile) await Deno.copyFile(src, dst);
+  }
+}
+
+async function copyTemplateFile(source: URL, target: URL): Promise<void> {
+  try {
+    await Deno.mkdir(new URL(".", target), { recursive: true });
+    await Deno.copyFile(source, target);
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) throw error;
   }
 }
 

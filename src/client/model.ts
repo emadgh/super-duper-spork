@@ -142,6 +142,8 @@ export interface ProjectPackagePermissions {
   write?: string[];
   net?: string[];
   env?: string[];
+  /** Explicit capability for dependencies that enumerate process.env and cannot use a key allowlist. */
+  envAll?: boolean;
   run?: string[];
   sys?: string[];
   ffi?: boolean;

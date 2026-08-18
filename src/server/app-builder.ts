@@ -1,5 +1,6 @@
 import ts from "npm:typescript@5.9.2";
 import type { LoadedProject, ProjectPackagePermissions } from "../client/model.ts";
+import { readBuildManifest, styleLinks } from "./build-providers.ts";
 
 export interface StandaloneBuildOptions {
   projectId: string;
@@ -19,6 +20,7 @@ const KERNEL_SOURCE = new URL("../app-kernel/", import.meta.url);
 
 export async function buildStandaloneApp(options: StandaloneBuildOptions): Promise<StandaloneBuildResult> {
   const { projectId, projectRoot, outputRoot, project } = options;
+  const buildManifest = await readBuildManifest(projectRoot);
   await Deno.mkdir(outputRoot, { recursive: true });
   for (const relative of ["public/", "kernel/", "host/"]) {
     await Deno.remove(new URL(relative, outputRoot), { recursive: true }).catch((error) => {
@@ -42,11 +44,12 @@ export async function buildStandaloneApp(options: StandaloneBuildOptions): Promi
   await Deno.copyFile(new URL("standalone-server.ts", KERNEL_SOURCE), new URL("kernel/standalone-server.ts", outputRoot));
   await Deno.copyFile(new URL("host-api.ts", KERNEL_SOURCE), new URL("kernel/host-api.ts", outputRoot));
 
-  await Deno.writeTextFile(new URL("public/index.html", outputRoot), standaloneHtml(projectId));
+  await Deno.writeTextFile(new URL("public/index.html", outputRoot), standaloneHtml(projectId, styleLinks(buildManifest)));
   await Deno.writeTextFile(new URL("public/app-data.json", outputRoot), `${JSON.stringify(project)}\n`);
   await copyOptionalDirectory(new URL("host/", projectRoot), new URL("host/", outputRoot));
   await copyOptionalDirectory(new URL("assets/", projectRoot), new URL("public/assets/", outputRoot));
   await copyOptionalFile(new URL("packages.json", projectRoot), new URL("packages.json", outputRoot));
+  await copyOptionalFile(new URL("build.json", projectRoot), new URL("build.json", outputRoot));
   await copyOptionalFile(new URL("deno.lock", projectRoot), new URL("deno.lock", outputRoot));
 
   const projectConfig = await readJsonObject(new URL("deno.json", projectRoot));
@@ -76,7 +79,8 @@ function createStandaloneDenoConfig(
   if (permissions.ffi) permissionArgs.push("--allow-ffi");
   if (permissions.sys?.length) permissionArgs.push(`--allow-sys=${permissions.sys.join(",")}`);
   if (permissions.run?.length) permissionArgs.push(`--allow-run=${permissions.run.join(",")}`);
-  if (permissions.env?.length) permissionArgs[3] = `--allow-env=${["PORT", ...permissions.env].join(",")}`;
+  if (permissions.envAll) permissionArgs[3] = "--allow-env";
+  else if (permissions.env?.length) permissionArgs[3] = `--allow-env=${["PORT", ...permissions.env].join(",")}`;
   if (permissions.net?.length) permissionArgs[0] = `--allow-net=${["127.0.0.1", "localhost", ...permissions.net].join(",")}`;
 
   return {
@@ -158,14 +162,16 @@ async function readJsonObject(url: URL): Promise<Record<string, unknown>> {
   }
 }
 
-function standaloneHtml(projectId: string): string {
+function standaloneHtml(projectId: string, styles: string[]): string {
   const id = JSON.stringify(projectId);
+  const styleTags = styles.map((href) => `<link rel="stylesheet" href="${href}">`).join("\n  ");
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Spork App</title>
+  ${styleTags}
   <style>html,body,#spork-app-root{min-height:100%;margin:0}body{background:#11141b;color:#f5f7fb}</style>
 </head>
 <body>

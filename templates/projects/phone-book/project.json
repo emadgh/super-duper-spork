@@ -1,0 +1,533 @@
+{
+  "version": 3,
+  "id": "template",
+  "name": "Phone Book · SQLite Demo",
+  "objects": [
+    "UI/PhoneBookShell.tsx",
+    "UI/SearchBox.tsx",
+    "UI/ContactList.tsx",
+    "UI/ContactForm.tsx",
+    "UI/StatusBar.tsx",
+    "Data/LoadContacts.ts",
+    "Data/CreateContact.ts",
+    "Data/UpdateContact.ts",
+    "Data/DeleteContact.ts"
+  ],
+  "objectFolders": [
+    "UI",
+    "Data"
+  ],
+  "styles": [],
+  "instances": [
+    {
+      "id": "app",
+      "objectFile": "UI/PhoneBookShell.tsx"
+    },
+    {
+      "id": "search",
+      "objectFile": "UI/SearchBox.tsx",
+      "parent": {
+        "instanceId": "app",
+        "slot": "search"
+      }
+    },
+    {
+      "id": "list",
+      "objectFile": "UI/ContactList.tsx",
+      "parent": {
+        "instanceId": "app",
+        "slot": "list"
+      }
+    },
+    {
+      "id": "form",
+      "objectFile": "UI/ContactForm.tsx",
+      "parent": {
+        "instanceId": "app",
+        "slot": "form"
+      }
+    },
+    {
+      "id": "status",
+      "objectFile": "UI/StatusBar.tsx",
+      "parent": {
+        "instanceId": "app",
+        "slot": "status"
+      }
+    },
+    {
+      "id": "loadContacts",
+      "objectFile": "Data/LoadContacts.ts"
+    },
+    {
+      "id": "createContact",
+      "objectFile": "Data/CreateContact.ts"
+    },
+    {
+      "id": "updateContact",
+      "objectFile": "Data/UpdateContact.ts"
+    },
+    {
+      "id": "deleteContact",
+      "objectFile": "Data/DeleteContact.ts"
+    }
+  ],
+  "blackboard": {},
+  "rules": [
+    {
+      "id": "initial-load",
+      "event": {
+        "instanceId": "app",
+        "name": "created"
+      },
+      "actions": [
+        {
+          "id": "load-initial",
+          "action": {
+            "instanceId": "loadContacts",
+            "name": "load"
+          },
+          "inputs": {
+            "query": {
+              "kind": "literal",
+              "value": ""
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "search",
+      "event": {
+        "instanceId": "search",
+        "name": "changed"
+      },
+      "actions": [
+        {
+          "id": "load-search",
+          "action": {
+            "instanceId": "loadContacts",
+            "name": "load"
+          },
+          "inputs": {
+            "query": {
+              "kind": "event",
+              "path": "query"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "loaded",
+      "event": {
+        "instanceId": "loadContacts",
+        "name": "loaded"
+      },
+      "actions": [
+        {
+          "id": "show-list",
+          "action": {
+            "instanceId": "list",
+            "name": "setContacts"
+          },
+          "inputs": {
+            "contacts": {
+              "kind": "event",
+              "path": "contacts"
+            }
+          },
+          "outputs": {}
+        },
+        {
+          "id": "loaded-status",
+          "action": {
+            "instanceId": "status",
+            "name": "set"
+          },
+          "inputs": {
+            "message": {
+              "kind": "event",
+              "path": "message"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "info"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "load-failed",
+      "event": {
+        "instanceId": "loadContacts",
+        "name": "failed"
+      },
+      "actions": [
+        {
+          "id": "load-error",
+          "action": {
+            "instanceId": "status",
+            "name": "set"
+          },
+          "inputs": {
+            "message": {
+              "kind": "event",
+              "path": "message"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "error"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "create",
+      "event": {
+        "instanceId": "form",
+        "name": "createRequested"
+      },
+      "actions": [
+        {
+          "id": "create-api",
+          "action": {
+            "instanceId": "createContact",
+            "name": "create"
+          },
+          "inputs": {
+            "contact": {
+              "kind": "event",
+              "path": "contact"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "update",
+      "event": {
+        "instanceId": "form",
+        "name": "updateRequested"
+      },
+      "actions": [
+        {
+          "id": "update-api",
+          "action": {
+            "instanceId": "updateContact",
+            "name": "update"
+          },
+          "inputs": {
+            "id": {
+              "kind": "event",
+              "path": "id"
+            },
+            "contact": {
+              "kind": "event",
+              "path": "contact"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "cancel-edit",
+      "event": {
+        "instanceId": "form",
+        "name": "cancelRequested"
+      },
+      "actions": [
+        {
+          "id": "reset-cancel",
+          "action": {
+            "instanceId": "form",
+            "name": "reset"
+          },
+          "inputs": {},
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "edit",
+      "event": {
+        "instanceId": "list",
+        "name": "editRequested"
+      },
+      "actions": [
+        {
+          "id": "edit-form",
+          "action": {
+            "instanceId": "form",
+            "name": "edit"
+          },
+          "inputs": {
+            "contact": {
+              "kind": "event",
+              "path": "contact"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "delete",
+      "event": {
+        "instanceId": "list",
+        "name": "deleteRequested"
+      },
+      "actions": [
+        {
+          "id": "delete-api",
+          "action": {
+            "instanceId": "deleteContact",
+            "name": "remove"
+          },
+          "inputs": {
+            "id": {
+              "kind": "event",
+              "path": "id"
+            },
+            "name": {
+              "kind": "event",
+              "path": "name"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "create-saved",
+      "event": {
+        "instanceId": "createContact",
+        "name": "saved"
+      },
+      "actions": [
+        {
+          "id": "create-reset",
+          "action": {
+            "instanceId": "form",
+            "name": "reset"
+          },
+          "inputs": {},
+          "outputs": {}
+        },
+        {
+          "id": "create-reload",
+          "action": {
+            "instanceId": "loadContacts",
+            "name": "load"
+          },
+          "inputs": {
+            "query": {
+              "kind": "literal",
+              "value": ""
+            }
+          },
+          "outputs": {}
+        },
+        {
+          "id": "create-status",
+          "action": {
+            "instanceId": "status",
+            "name": "set"
+          },
+          "inputs": {
+            "message": {
+              "kind": "event",
+              "path": "message"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "info"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "update-saved",
+      "event": {
+        "instanceId": "updateContact",
+        "name": "saved"
+      },
+      "actions": [
+        {
+          "id": "update-reset",
+          "action": {
+            "instanceId": "form",
+            "name": "reset"
+          },
+          "inputs": {},
+          "outputs": {}
+        },
+        {
+          "id": "update-reload",
+          "action": {
+            "instanceId": "loadContacts",
+            "name": "load"
+          },
+          "inputs": {
+            "query": {
+              "kind": "literal",
+              "value": ""
+            }
+          },
+          "outputs": {}
+        },
+        {
+          "id": "update-status",
+          "action": {
+            "instanceId": "status",
+            "name": "set"
+          },
+          "inputs": {
+            "message": {
+              "kind": "event",
+              "path": "message"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "info"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "delete-done",
+      "event": {
+        "instanceId": "deleteContact",
+        "name": "deleted"
+      },
+      "actions": [
+        {
+          "id": "delete-reload",
+          "action": {
+            "instanceId": "loadContacts",
+            "name": "load"
+          },
+          "inputs": {
+            "query": {
+              "kind": "literal",
+              "value": ""
+            }
+          },
+          "outputs": {}
+        },
+        {
+          "id": "delete-status",
+          "action": {
+            "instanceId": "status",
+            "name": "set"
+          },
+          "inputs": {
+            "message": {
+              "kind": "event",
+              "path": "message"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "info"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "createContact-failed",
+      "event": {
+        "instanceId": "createContact",
+        "name": "failed"
+      },
+      "actions": [
+        {
+          "id": "createContact-error",
+          "action": {
+            "instanceId": "status",
+            "name": "set"
+          },
+          "inputs": {
+            "message": {
+              "kind": "event",
+              "path": "message"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "error"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "updateContact-failed",
+      "event": {
+        "instanceId": "updateContact",
+        "name": "failed"
+      },
+      "actions": [
+        {
+          "id": "updateContact-error",
+          "action": {
+            "instanceId": "status",
+            "name": "set"
+          },
+          "inputs": {
+            "message": {
+              "kind": "event",
+              "path": "message"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "error"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    },
+    {
+      "id": "deleteContact-failed",
+      "event": {
+        "instanceId": "deleteContact",
+        "name": "failed"
+      },
+      "actions": [
+        {
+          "id": "deleteContact-error",
+          "action": {
+            "instanceId": "status",
+            "name": "set"
+          },
+          "inputs": {
+            "message": {
+              "kind": "event",
+              "path": "message"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "error"
+            }
+          },
+          "outputs": {}
+        }
+      ]
+    }
+  ],
+  "updatedAt": "1970-01-01T00:00:00.000Z"
+}

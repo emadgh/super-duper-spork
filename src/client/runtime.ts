@@ -59,6 +59,12 @@ export class EventRuntime {
         props: Object.freeze(structuredClone(instance.props ?? {})),
       });
     }
+
+    queueMicrotask(() => {
+      for (const instance of this.#runtimeInstances.values()) {
+        if (instance.definition.events?.created) this.emit(instance.id, "created");
+      }
+    });
   }
 
   mountPreview(root: HTMLElement, options: { styles?: readonly string[]; chrome?: boolean } = {}): void {
