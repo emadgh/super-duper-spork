@@ -5,6 +5,7 @@ const PUBLIC = new URL("public/", ROOT);
 const DATA = new URL("data/", ROOT);
 const HOST = new URL("host/main.ts", ROOT);
 const port = parsePort(Deno.args);
+const hostname = "127.0.0.1";
 
 await Deno.mkdir(DATA, { recursive: true });
 const context: AppHostContext = { projectRoot: ROOT, dataDir: DATA };
@@ -12,7 +13,7 @@ const hostModule = await loadHostModule();
 await hostModule?.onStart?.(context);
 
 const abort = new AbortController();
-const server = Deno.serve({ port, signal: abort.signal }, async (request) => {
+const server = Deno.serve({ hostname, port, signal: abort.signal }, async (request) => {
   try {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {
@@ -26,7 +27,7 @@ const server = Deno.serve({ port, signal: abort.signal }, async (request) => {
   }
 });
 
-console.log(`Spork application host: http://127.0.0.1:${port}`);
+console.log(`Spork application host: http://${hostname}:${port}`);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   try {
