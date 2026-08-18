@@ -825,7 +825,7 @@ async function runProject(): Promise<void> {
   );
   liveBlackboard = runtime.getBlackboard();
   renderBlackboard();
-  runtime.mountPreview(previewHost);
+  runtime.mountPreview(previewHost, { styles: project.styles.map((style) => style.compiled) });
   previewPanel.classList.add("is-running");
   setGlobalStatus("Runtime running");
 }

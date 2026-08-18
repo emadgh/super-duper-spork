@@ -1,4 +1,5 @@
 import ts from "npm:typescript@5.9.2";
+import { defaultStyleCompiler } from "./server/style-pipeline.ts";
 
 type PortType = "number" | "string" | "boolean" | "any";
 
@@ -45,6 +46,7 @@ interface ProjectManifest {
   name: string;
   objects: string[];
   objectFolders: string[];
+  styles: string[];
   instances: ProjectInstance[];
   blackboard: Record<string, BlackboardEntry>;
   rules: EventRule[];
@@ -123,6 +125,14 @@ async function handleApi(request: Request, url: URL): Promise<Response> {
       return json(await loadProject(projectId), 201);
     }
 
+    if (parts.length === 4 && parts[3] === "styles" && request.method === "POST") {
+      const body = await readJson<{ name?: string }>(request);
+      const name = body.name?.trim();
+      if (!name) return json({ error: "Style name is required." }, 400);
+      await addStyle(projectId, name);
+      return json(await loadProject(projectId), 201);
+    }
+
     if (parts.length === 4 && parts[3] === "folders" && request.method === "POST") {
       const body = await readJson<{ name?: string; parent?: string }>(request);
       const name = body.name?.trim();
@@ -137,6 +147,19 @@ async function handleApi(request: Request, url: URL): Promise<Response> {
       if (!templateId) return json({ error: "Action template id is required." }, 400);
       await addReadyAction(projectId, templateId, body.folder ?? "");
       return json(await loadProject(projectId), 201);
+    }
+
+    if (parts.length === 5 && parts[3] === "styles" && request.method === "PUT") {
+      const file = validateStylePath(parts[4]);
+      const body = await readJson<{ source?: string }>(request);
+      if (typeof body.source !== "string") return json({ error: "Style source is required." }, 400);
+      const manifest = await readManifest(projectId);
+      if (!manifest.styles.includes(file)) return json({ error: "Unknown style file." }, 404);
+      defaultStyleCompiler.compile(body.source, file);
+      await Deno.writeTextFile(styleUrl(projectId, file), body.source);
+      manifest.updatedAt = new Date().toISOString();
+      await writeManifest(manifest);
+      return json(await loadProject(projectId));
     }
 
     if (parts.length === 4 && parts[3] === "reveal" && request.method === "POST") {
@@ -242,6 +265,7 @@ async function ensureCounterDemo(): Promise<void> {
     name: "Counter Demo",
     objects: ["Button.ts", "Counter.ts"],
     objectFolders: [],
+    styles: [],
     instances: [
       { id: "button1", objectFile: "Button.ts" },
       { id: "counter1", objectFile: "Counter.ts" },
@@ -285,6 +309,7 @@ async function ensureCalculatorDemo(): Promise<void> {
     name: "Calculator",
     objects: ["CalculatorForm.ts", "Calculator.ts", "ResultDisplay.ts"],
     objectFolders: [],
+    styles: [],
     instances: [
       { id: "form1", objectFile: "CalculatorForm.ts" },
       { id: "calculator1", objectFile: "Calculator.ts" },
@@ -454,17 +479,27 @@ async function ensureProjectTemplate(projectId: string, name: string, templateNa
     name,
     objects: raw.objects.map(validateObjectPath),
     objectFolders: normalizeFolders(raw.objectFolders ?? [], raw.objects),
+    styles: Array.isArray(raw.styles) ? raw.styles.map(validateStylePath) : [],
     instances: raw.instances.filter(isInstance).map(sanitizeProjectInstance),
     blackboard: sanitizeBlackboard(raw.blackboard),
     rules: sanitizeRules(raw.rules),
     updatedAt: new Date().toISOString(),
   };
   await Deno.mkdir(new URL("objects/", projectUrl(projectId)), { recursive: true });
+  await Deno.mkdir(new URL("styles/", projectUrl(projectId)), { recursive: true });
   for (const file of manifest.objects) {
     const source = await Deno.readTextFile(new URL(`objects/${file}`, templateRoot));
     const result = transpileObject(source, file);
     if (result.errors.length) throw new Error(`Template ${file}: ${result.errors.join("\n")}`);
     const target = objectUrl(projectId, file);
+    await Deno.mkdir(new URL(".", target), { recursive: true });
+    await Deno.writeTextFile(target, source);
+  }
+  for (const file of manifest.styles) {
+    const source = await Deno.readTextFile(new URL(`styles/${file}`, templateRoot));
+    const compiled = defaultStyleCompiler.compile(source, file);
+    if (compiled.warnings.length) console.warn(`Style ${file}: ${compiled.warnings.join("; ")}`);
+    const target = styleUrl(projectId, file);
     await Deno.mkdir(new URL(".", target), { recursive: true });
     await Deno.writeTextFile(target, source);
   }
@@ -505,6 +540,7 @@ async function createProject(name: string): Promise<ProjectManifest> {
   const id = `${base}-${crypto.randomUUID().slice(0, 6)}`;
   const dir = projectUrl(id);
   await Deno.mkdir(new URL("objects/", dir), { recursive: true });
+  await Deno.mkdir(new URL("styles/", dir), { recursive: true });
 
   const manifest: ProjectManifest = {
     version: 3,
@@ -512,6 +548,7 @@ async function createProject(name: string): Promise<ProjectManifest> {
     name,
     objects: [],
     objectFolders: [],
+    styles: [],
     instances: [],
     blackboard: {},
     rules: [],
@@ -552,6 +589,27 @@ async function addObject(projectId: string, rawName: string, rawFolder = ""): Pr
   await writeManifest(manifest);
 }
 
+async function addStyle(projectId: string, rawName: string): Promise<void> {
+  const manifest = await readManifest(projectId);
+  const base = slugify(rawName) || "styles";
+  let file = validateStylePath(`${base}.css`);
+  let index = 2;
+  while (manifest.styles.includes(file)) file = validateStylePath(`${base}-${index++}.css`);
+  const className = base.replace(/[^A-Za-z0-9_-]/g, "-");
+  const source = `@layer project {
+  .${className} {
+    /* Project styles */
+  }
+}
+`;
+  defaultStyleCompiler.compile(source, file);
+  await Deno.mkdir(new URL("styles/", projectUrl(projectId)), { recursive: true });
+  await Deno.writeTextFile(styleUrl(projectId, file), source);
+  manifest.styles.push(file);
+  manifest.updatedAt = new Date().toISOString();
+  await writeManifest(manifest);
+}
+
 async function addObjectFolder(projectId: string, rawName: string, rawParent = ""): Promise<void> {
   const manifest = await readManifest(projectId);
   const parent = validateObjectFolder(rawParent);
@@ -588,15 +646,22 @@ async function moveObject(projectId: string, rawFile: string, rawFolder = ""): P
 async function loadProject(projectId: string): Promise<{
   manifest: ProjectManifest;
   objects: Array<{ file: string; source: string; compiled: string }>;
+  styles: Array<{ file: string; source: string; compiled: string; warnings: string[] }>;
 }> {
   const manifest = await readManifest(projectId);
   const objects = [];
+  const styles = [];
   for (const file of manifest.objects) {
     const source = await Deno.readTextFile(objectUrl(projectId, file));
     const result = transpileObject(source, file);
     objects.push({ file, source, compiled: result.output });
   }
-  return { manifest, objects };
+  for (const file of manifest.styles) {
+    const source = await Deno.readTextFile(styleUrl(projectId, file));
+    const result = defaultStyleCompiler.compile(source, file);
+    styles.push({ file, source, compiled: result.css, warnings: result.warnings });
+  }
+  return { manifest, objects, styles };
 }
 
 function transpileObject(source: string, file: string): { output: string; errors: string[] } {
@@ -645,6 +710,7 @@ function sanitizeLoadedManifest(manifest: Omit<Partial<ProjectManifest>, "versio
     name: typeof manifest.name === "string" && manifest.name.trim() ? manifest.name.trim() : id,
     objects,
     objectFolders: normalizeFolders(explicitFolders, objects),
+    styles: Array.isArray(manifest.styles) ? manifest.styles.filter((value): value is string => typeof value === "string").map(validateStylePath) : [],
     instances: Array.isArray(manifest.instances)
       ? manifest.instances.filter(isInstance).map(sanitizeProjectInstance)
       : [],
@@ -678,6 +744,7 @@ function sanitizeManifest(input: ProjectManifest, current: ProjectManifest): Pro
     name: typeof input.name === "string" && input.name.trim() ? input.name.trim() : current.name,
     objects: current.objects.filter((file) => validObjects.has(file)),
     objectFolders: normalizeFolders(current.objectFolders, current.objects),
+    styles: current.styles,
     instances: current.instances,
     blackboard,
     rules,
@@ -803,6 +870,10 @@ function objectUrl(projectId: string, file: string): URL {
   return new URL(`objects/${encodeObjectPath(validateObjectPath(file))}`, projectUrl(projectId));
 }
 
+function styleUrl(projectId: string, file: string): URL {
+  return new URL(`styles/${encodeObjectPath(validateStylePath(file))}`, projectUrl(projectId));
+}
+
 function objectFolderUrl(projectId: string, folder: string): URL {
   const safe = validateObjectFolder(folder);
   return new URL(`objects/${safe ? `${encodeObjectPath(safe)}/` : ""}`, projectUrl(projectId));
@@ -819,6 +890,16 @@ function validateObjectPath(value: string): string {
   if (!segments.length || segments.length > 8) throw new Error("Invalid object path.");
   const file = segments.at(-1) ?? "";
   if (!/^[A-Za-z][A-Za-z0-9_-]{0,79}\.tsx?$/.test(file)) throw new Error("Invalid object filename.");
+  for (const folder of segments.slice(0, -1)) validateFolderSegment(folder);
+  return segments.join("/");
+}
+
+function validateStylePath(value: string): string {
+  const normalized = value.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const segments = normalized.split("/");
+  if (!segments.length || segments.length > 8) throw new Error("Invalid style path.");
+  const file = segments.at(-1) ?? "";
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}\.css$/i.test(file)) throw new Error("Invalid style filename.");
   for (const folder of segments.slice(0, -1)) validateFolderSegment(folder);
   return segments.join("/");
 }

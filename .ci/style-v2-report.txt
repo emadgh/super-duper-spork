@@ -1,0 +1,96 @@
+PATCH_STATUS=0
+[0m[32mDownload[0m https://registry.npmjs.org/typescript/-/typescript-5.9.2.tgz
+[0m[32mInitialize[0m typescript@5.9.2
+[0m[32mTask[0m [0m[36mcheck[0m deno check src/server.ts scripts/build.ts tests/runtime.test.ts tests/dom-core.test.ts tests/style-pipeline.test.ts && deno check --config deno.client.json src/client/main.ts
+[0m[32mDownload[0m https://registry.npmjs.org/typescript
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss
+[0m[32mDownload[0m https://registry.npmjs.org/detect-libc
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss-android-arm64
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss-darwin-arm64
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss-darwin-x64
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss-freebsd-x64
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss-linux-arm-gnueabihf
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss-linux-arm64-gnu
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss-linux-arm64-musl
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss-linux-x64-gnu
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss-linux-x64-musl
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss-win32-arm64-msvc
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss-win32-x64-msvc
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss/-/lightningcss-1.33.0.tgz
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss-linux-x64-musl/-/lightningcss-linux-x64-musl-1.33.0.tgz
+[0m[32mDownload[0m https://registry.npmjs.org/lightningcss-linux-x64-gnu/-/lightningcss-linux-x64-gnu-1.33.0.tgz
+[0m[32mDownload[0m https://registry.npmjs.org/detect-libc/-/detect-libc-2.1.2.tgz
+[0m[32mInitialize[0m lightningcss@1.33.0
+[0m[32mInitialize[0m detect-libc@2.1.2
+[0m[32mInitialize[0m lightningcss-linux-x64-musl@1.33.0
+[0m[32mInitialize[0m lightningcss-linux-x64-gnu@1.33.0
+[0m[32mCheck[0m src/server.ts
+[0m[32mCheck[0m scripts/build.ts
+[0m[32mCheck[0m tests/runtime.test.ts
+[0m[32mCheck[0m tests/dom-core.test.ts
+[0m[32mCheck[0m tests/style-pipeline.test.ts
+[0m[1mTS2741 [0m[ERROR]: Property 'styles' is missing in type '{ version: 3; id: string; name: string; objects: string[]; objectFolders: string[]; instances: { id: string; objectFile: string; }[]; blackboard: { display: { type: "string"; value: string; }; expression: { type: "string"; value: string; }; memory: { ...; }; }; rules: { ...; }[]; updatedAt: string; }' but required in type 'ProjectManifest'.
+  const manifest: ProjectManifest = {
+[0m[31m        ~~~~~~~~[0m
+    at [0m[36mfile:///home/runner/work/super-duper-spork/super-duper-spork/src/server.ts[0m:[0m[33m367[0m:[0m[33m9[0m
+
+    'styles' is declared here.
+      styles: string[];
+    [0m[36m  ~~~~~~[0m
+        at [0m[36mfile:///home/runner/work/super-duper-spork/super-duper-spork/src/server.ts[0m:[0m[33m49[0m:[0m[33m3[0m
+
+[0m[1m[31merror[0m: Type checking failed.
+CHECK_STATUS=1
+[0m[32mTask[0m [0m[36mtest[0m deno test --allow-read --allow-env --allow-ffi --allow-sys tests
+[0m[32mCheck[0m tests/dom-core.test.ts
+[0m[32mCheck[0m tests/runtime.test.ts
+[0m[32mCheck[0m tests/style-pipeline.test.ts
+[0m[38;5;245mrunning 4 tests from ./tests/dom-core.test.ts[0m
+DomCore h creates declarative element trees ... [0m[32mok[0m [0m[38;5;245m(524µs)[0m
+DomCore supports fragments and named slots ... [0m[32mok[0m [0m[38;5;245m(151µs)[0m
+normalizeChildren removes empty boolean values and flattens arrays ... [0m[32mok[0m [0m[38;5;245m(131µs)[0m
+object evaluator injects h Fragment and Slot for TSX-compiled modules ... [0m[32mok[0m [0m[38;5;245m(281µs)[0m
+[0m[38;5;245mrunning 3 tests from ./tests/runtime.test.ts[0m
+action output can feed next action and blackboard ... [0m[32mok[0m [0m[38;5;245m(1ms)[0m
+generic calculator key event can drive independent engine and view objects ... [0m[32mok[0m [0m[38;5;245m(553µs)[0m
+instance props are available to actions ... [0m[32mok[0m [0m[38;5;245m(292µs)[0m
+[0m[38;5;245mrunning 2 tests from ./tests/style-pipeline.test.ts[0m
+Lightning CSS compiler validates and transforms project CSS ... [0m[32mok[0m [0m[38;5;245m(17ms)[0m
+Lightning CSS compiler reports invalid CSS as an error ... [0m[31mFAILED[0m [0m[38;5;245m(713µs)[0m
+
+[0m[1m[37m[41m ERRORS [0m
+
+Lightning CSS compiler reports invalid CSS as an error [0m[38;5;245m=> ./tests/style-pipeline.test.ts:17:6[0m
+[0m[1m[31merror[0m: Error: Expected invalid CSS to throw
+  if (!condition) throw new Error(message);
+[0m[31m                        ^[0m
+    at [0m[1m[3massert[0m ([0m[2m[38;5;245mfile:///home/runner/work/super-duper-spork/super-duper-spork/[0m[0m[36mtests/style-pipeline.test.ts[0m:[0m[33m29[0m:[0m[33m25[0m)
+    at [0m[2m[38;5;245mfile:///home/runner/work/super-duper-spork/super-duper-spork/[0m[0m[36mtests/style-pipeline.test.ts[0m:[0m[33m25[0m:[0m[33m3[0m
+
+[0m[1m[37m[41m FAILURES [0m
+
+Lightning CSS compiler reports invalid CSS as an error [0m[38;5;245m=> ./tests/style-pipeline.test.ts:17:6[0m
+
+[0m[31mFAILED[0m | 8 passed | 1 failed [0m[38;5;245m(169ms)[0m
+
+[0m[1m[31merror[0m: Test failed
+TEST_STATUS=1
+[0m[32mTask[0m [0m[36mbuild[0m deno task check && deno run --allow-read --allow-write --allow-env scripts/build.ts
+[0m[32mTask[0m [0m[36mcheck[0m deno check src/server.ts scripts/build.ts tests/runtime.test.ts tests/dom-core.test.ts tests/style-pipeline.test.ts && deno check --config deno.client.json src/client/main.ts
+[0m[32mCheck[0m src/server.ts
+[0m[32mCheck[0m scripts/build.ts
+[0m[32mCheck[0m tests/runtime.test.ts
+[0m[32mCheck[0m tests/dom-core.test.ts
+[0m[32mCheck[0m tests/style-pipeline.test.ts
+[0m[1mTS2741 [0m[ERROR]: Property 'styles' is missing in type '{ version: 3; id: string; name: string; objects: string[]; objectFolders: string[]; instances: { id: string; objectFile: string; }[]; blackboard: { display: { type: "string"; value: string; }; expression: { type: "string"; value: string; }; memory: { ...; }; }; rules: { ...; }[]; updatedAt: string; }' but required in type 'ProjectManifest'.
+  const manifest: ProjectManifest = {
+[0m[31m        ~~~~~~~~[0m
+    at [0m[36mfile:///home/runner/work/super-duper-spork/super-duper-spork/src/server.ts[0m:[0m[33m367[0m:[0m[33m9[0m
+
+    'styles' is declared here.
+      styles: string[];
+    [0m[36m  ~~~~~~[0m
+        at [0m[36mfile:///home/runner/work/super-duper-spork/super-duper-spork/src/server.ts[0m:[0m[33m49[0m:[0m[33m3[0m
+
+[0m[1m[31merror[0m: Type checking failed.
+BUILD_STATUS=1
