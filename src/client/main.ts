@@ -13,6 +13,7 @@ import type {
   ObjectEventDefinition,
   PortDefinition,
   PortType,
+  PackagePresetSummary,
   ProjectObjectFile,
   ProjectSummary,
   ValueBinding,
@@ -37,6 +38,10 @@ const addLibraryActionButton = required<HTMLButtonElement>("#add-library-action"
 const addFolderButton = required<HTMLButtonElement>("#add-folder");
 const blackboardList = required<HTMLElement>("#blackboard-list");
 const addBlackboardButton = required<HTMLButtonElement>("#add-blackboard");
+const packageList = required<HTMLElement>("#package-list");
+const packagePresetList = required<HTMLElement>("#package-preset-list");
+const packagePermissions = required<HTMLElement>("#package-permissions");
+const installPackagesButton = required<HTMLButtonElement>("#install-packages");
 const editorHost = required<HTMLElement>("#editor-host");
 const filenameLabel = required<HTMLElement>("#filename");
 const editorStatus = required<HTMLElement>("#editor-status");
@@ -75,6 +80,7 @@ let runtime: EventRuntime | null = null;
 let definitions = new Map<string, ObjectDefinition>();
 let projectSummaries: ProjectSummary[] = [];
 let actionTemplates: ActionTemplateSummary[] | null = null;
+let packagePresets: PackagePresetSummary[] | null = null;
 let traceRows: RuntimeTrace[] = [];
 let liveBlackboard: Record<string, BlackboardEntry> | null = null;
 let selectedFolder = "";
@@ -117,6 +123,7 @@ revealObjectButton.addEventListener("click", () => void revealSelectedObject());
 moveObjectButton.addEventListener("click", () => void moveSelectedObject());
 diagramRefreshButton.addEventListener("click", renderDiagram);
 addBlackboardButton.addEventListener("click", () => void addBlackboardVariable());
+installPackagesButton.addEventListener("click", () => void installProjectPackages());
 objectFilter.addEventListener("input", renderObjectList);
 clearTraceButton.addEventListener("click", () => {
   traceRows = [];
@@ -239,10 +246,114 @@ function renderAll(): void {
   renderObjectList();
   renderSelectedObject();
   renderBlackboard();
+  void renderPackages();
   renderEventOptions();
   renderRules();
   renderDiagram();
   renderProjectMeta();
+}
+
+async function renderPackages(): Promise<void> {
+  packageList.replaceChildren();
+  packagePresetList.replaceChildren();
+  packagePermissions.replaceChildren();
+  if (!project) return;
+
+  const state = project.packages;
+  const permissions = state.effectivePermissions;
+  const chips: string[] = [];
+  if (permissions.ffi) chips.push("FFI");
+  for (const [key, values] of Object.entries(permissions)) {
+    if (key === "ffi" || !Array.isArray(values) || values.length === 0) continue;
+    chips.push(`${key}: ${values.join(", ")}`);
+  }
+  packagePermissions.innerHTML = `
+    <strong>node_modules: ${escapeHtml(state.manifest.nodeModulesDir)}</strong>
+    <small>${chips.length ? `Permissions: ${chips.map(escapeHtml).join(" · ")}` : "No extra runtime permissions"}</small>
+  `;
+
+  if (!state.manifest.packages.length) {
+    packageList.append(emptyMessage("No project packages. Add a preset below."));
+  } else {
+    for (const pkg of state.manifest.packages) {
+      const row = document.createElement("article");
+      row.className = "package-row";
+      const nativeNote = pkg.native ? "native" : pkg.role;
+      const scripts = pkg.allowScripts?.length ? `scripts: ${pkg.allowScripts.join(", ")}` : "no lifecycle scripts";
+      row.innerHTML = `
+        <div><strong>${escapeHtml(pkg.alias)}</strong><code>${escapeHtml(pkg.specifier)}</code></div>
+        <small>${escapeHtml(nativeNote)} · ${escapeHtml(scripts)}</small>
+      `;
+      const remove = document.createElement("button");
+      remove.className = "text-button danger-text";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", () => void removeProjectPackage(pkg.id));
+      row.append(remove);
+      packageList.append(row);
+    }
+  }
+
+  packagePresets ??= await api.listPackagePresets();
+  for (const preset of packagePresets) {
+    const installed = preset.packageIds.every((id) => state.manifest.packages.some((pkg) => pkg.id === id));
+    const card = document.createElement("button");
+    card.className = `package-preset${installed ? " is-installed" : ""}`;
+    card.innerHTML = `<strong>${escapeHtml(preset.name)}</strong><small>${escapeHtml(preset.description)}</small><code>${escapeHtml(preset.packageIds.join(" + "))}</code>`;
+    card.disabled = installed;
+    card.addEventListener("click", () => void addProjectPackagePreset(preset.id));
+    packagePresetList.append(card);
+  }
+}
+
+async function addProjectPackagePreset(presetId: string): Promise<void> {
+  if (!project) return;
+  try {
+    setGlobalStatus("Adding package preset…");
+    project = await api.addPackagePreset(project.manifest.id, presetId);
+    await renderPackages();
+    renderProjectMeta();
+    setGlobalStatus("Package preset added — review permissions, then Install");
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  }
+}
+
+async function removeProjectPackage(packageId: string): Promise<void> {
+  if (!project) return;
+  try {
+    project = await api.removePackage(project.manifest.id, packageId);
+    await renderPackages();
+    setGlobalStatus("Package removed");
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  }
+}
+
+async function installProjectPackages(): Promise<void> {
+  if (!project) return;
+  const packages = project.packages.manifest.packages;
+  if (!packages.length) {
+    setGlobalStatus("No packages to install", true);
+    return;
+  }
+  const native = packages.filter((pkg) => pkg.native || pkg.allowScripts?.length).map((pkg) => pkg.alias);
+  const message = native.length
+    ? `Install project packages? Native/lifecycle packages: ${native.join(", ")}. Their declared scripts and permissions will be used.`
+    : "Install/sync project packages and lockfile?";
+  if (!confirm(message)) return;
+  try {
+    installPackagesButton.disabled = true;
+    setGlobalStatus("Installing project packages…");
+    const result = await api.installPackages(project.manifest.id);
+    project = await api.loadProject(project.manifest.id);
+    await renderPackages();
+    console.info(result.output);
+    setGlobalStatus("Packages installed and lockfile synchronized");
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  } finally {
+    installPackagesButton.disabled = false;
+  }
 }
 
 function compileDefinitions(objects: ProjectObjectFile[]): Map<string, ObjectDefinition> {

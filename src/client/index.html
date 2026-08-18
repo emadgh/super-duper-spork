@@ -36,6 +36,9 @@
       <button class="activity-button" data-view="blackboard" title="Blackboard">
         <span class="activity-glyph">▦</span><small>Board</small>
       </button>
+      <button class="activity-button" data-view="packages" title="Packages">
+        <span class="activity-glyph">⬡</span><small>Packages</small>
+      </button>
     </nav>
 
     <aside class="navigator panel-flat">
@@ -71,6 +74,23 @@
         </div>
         <div id="blackboard-list" class="blackboard-list"></div>
         <div class="navigator-footer">Blackboard values belong to the project and can be bound to action inputs or action outputs.</div>
+      </section>
+
+      <section id="packages-view" class="navigator-view">
+        <div class="section-titlebar">
+<div>
+  <span class="eyebrow">PROJECT RUNTIME</span>
+  <h2>Packages</h2>
+</div>
+<button id="install-packages" class="icon-button" title="Install/sync project packages">↻</button>
+        </div>
+        <div id="package-permissions" class="package-permissions"></div>
+        <div id="package-list" class="package-list"></div>
+        <div class="section-titlebar package-library-title">
+<div><span class="eyebrow">LIBRARY</span><h3>Presets</h3></div>
+        </div>
+        <div id="package-preset-list" class="package-preset-list"></div>
+        <div class="navigator-footer">Packages are project-local. Native scripts and runtime permissions are explicit and visible before install.</div>
       </section>
     </aside>
 
