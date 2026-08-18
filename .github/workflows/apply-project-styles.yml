@@ -1,0 +1,259 @@
+name: Apply project stylesheet integration
+
+on:
+  push:
+    branches:
+      - feature/project-style-pipeline
+    paths:
+      - ".github/workflows/apply-project-styles.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/project-style-pipeline
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Patch project style support
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'Expected block not found in {path}: {old[:100]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          p = Path('src/server.ts')
+          text = p.read_text()
+          text = text.replace('import ts from "npm:typescript@5.9.2";\n', 'import ts from "npm:typescript@5.9.2";\nimport { defaultStyleCompiler } from "./server/style-pipeline.ts";\n', 1)
+          text = text.replace('  objectFolders: string[];\n  instances: ProjectInstance[];', '  objectFolders: string[];\n  styles: string[];\n  instances: ProjectInstance[];', 1)
+
+          object_route = '''    if (parts.length === 4 && parts[3] === "objects" && request.method === "POST") {
+      const body = await readJson<{ name?: string; folder?: string }>(request);
+      const name = body.name?.trim();
+      if (!name) return json({ error: "Object name is required." }, 400);
+      await addObject(projectId, name, body.folder ?? "");
+      return json(await loadProject(projectId), 201);
+    }
+'''
+          style_route = object_route + '''
+    if (parts.length === 4 && parts[3] === "styles" && request.method === "POST") {
+      const body = await readJson<{ name?: string }>(request);
+      const name = body.name?.trim();
+      if (!name) return json({ error: "Style name is required." }, 400);
+      await addStyle(projectId, name);
+      return json(await loadProject(projectId), 201);
+    }
+'''
+          if object_route not in text: raise SystemExit('object POST route not found')
+          text = text.replace(object_route, style_route, 1)
+
+          reveal_route = '''    if (parts.length === 4 && parts[3] === "reveal" && request.method === "POST") {
+'''
+          save_style_route = '''    if (parts.length === 5 && parts[3] === "styles" && request.method === "PUT") {
+      const file = validateStylePath(parts[4]);
+      const body = await readJson<{ source?: string }>(request);
+      if (typeof body.source !== "string") return json({ error: "Style source is required." }, 400);
+      const manifest = await readManifest(projectId);
+      if (!manifest.styles.includes(file)) return json({ error: "Unknown style file." }, 404);
+      defaultStyleCompiler.compile(body.source, file);
+      await Deno.writeTextFile(styleUrl(projectId, file), body.source);
+      manifest.updatedAt = new Date().toISOString();
+      await writeManifest(manifest);
+      return json(await loadProject(projectId));
+    }
+
+''' + reveal_route
+          if reveal_route not in text: raise SystemExit('reveal route not found')
+          text = text.replace(reveal_route, save_style_route, 1)
+
+          # Built-in/new-project manifests.
+          text = text.replace('    objectFolders: [],\n    instances:', '    objectFolders: [],\n    styles: [],\n    instances:')
+
+          template_manifest = '''    objects: raw.objects.map(validateObjectPath),
+    objectFolders: normalizeFolders(raw.objectFolders ?? [], raw.objects),
+    instances: raw.instances.filter(isInstance).map(sanitizeProjectInstance),'''
+          template_manifest_new = '''    objects: raw.objects.map(validateObjectPath),
+    objectFolders: normalizeFolders(raw.objectFolders ?? [], raw.objects),
+    styles: Array.isArray(raw.styles) ? raw.styles.map(validateStylePath) : [],
+    instances: raw.instances.filter(isInstance).map(sanitizeProjectInstance),'''
+          if template_manifest not in text: raise SystemExit('template manifest block not found')
+          text = text.replace(template_manifest, template_manifest_new, 1)
+
+          template_copy = '''  await Deno.mkdir(new URL("objects/", projectUrl(projectId)), { recursive: true });
+  for (const file of manifest.objects) {
+    const source = await Deno.readTextFile(new URL(`objects/${file}`, templateRoot));
+    const result = transpileObject(source, file);
+    if (result.errors.length) throw new Error(`Template ${file}: ${result.errors.join("\\n")}`);
+    const target = objectUrl(projectId, file);
+    await Deno.mkdir(new URL(".", target), { recursive: true });
+    await Deno.writeTextFile(target, source);
+  }
+  await writeManifest(manifest);'''
+          template_copy_new = '''  await Deno.mkdir(new URL("objects/", projectUrl(projectId)), { recursive: true });
+  await Deno.mkdir(new URL("styles/", projectUrl(projectId)), { recursive: true });
+  for (const file of manifest.objects) {
+    const source = await Deno.readTextFile(new URL(`objects/${file}`, templateRoot));
+    const result = transpileObject(source, file);
+    if (result.errors.length) throw new Error(`Template ${file}: ${result.errors.join("\\n")}`);
+    const target = objectUrl(projectId, file);
+    await Deno.mkdir(new URL(".", target), { recursive: true });
+    await Deno.writeTextFile(target, source);
+  }
+  for (const file of manifest.styles) {
+    const source = await Deno.readTextFile(new URL(`styles/${file}`, templateRoot));
+    defaultStyleCompiler.compile(source, file);
+    const target = styleUrl(projectId, file);
+    await Deno.mkdir(new URL(".", target), { recursive: true });
+    await Deno.writeTextFile(target, source);
+  }
+  await writeManifest(manifest);'''
+          if template_copy not in text: raise SystemExit('template copy block not found')
+          text = text.replace(template_copy, template_copy_new, 1)
+
+          text = text.replace('  await Deno.mkdir(new URL("objects/", dir), { recursive: true });\n\n  const manifest:', '  await Deno.mkdir(new URL("objects/", dir), { recursive: true });\n  await Deno.mkdir(new URL("styles/", dir), { recursive: true });\n\n  const manifest:', 1)
+
+          add_folder_marker = 'async function addObjectFolder(projectId: string, rawName: string, rawParent = ""): Promise<void> {'
+          add_style_fn = '''async function addStyle(projectId: string, rawName: string): Promise<void> {
+  const manifest = await readManifest(projectId);
+  const base = slugify(rawName) || "styles";
+  let file = validateStylePath(`${base}.css`);
+  let index = 2;
+  while (manifest.styles.includes(file)) file = validateStylePath(`${base}-${index++}.css`);
+  const source = `@layer project {\n  .${base} {\n    /* Project styles */\n  }\n}\n`;
+  defaultStyleCompiler.compile(source, file);
+  await Deno.mkdir(new URL("styles/", projectUrl(projectId)), { recursive: true });
+  await Deno.writeTextFile(styleUrl(projectId, file), source);
+  manifest.styles.push(file);
+  manifest.updatedAt = new Date().toISOString();
+  await writeManifest(manifest);
+}
+
+''' + add_folder_marker
+          if add_folder_marker not in text: raise SystemExit('addObjectFolder marker not found')
+          text = text.replace(add_folder_marker, add_style_fn, 1)
+
+          old_load = '''async function loadProject(projectId: string): Promise<{
+  manifest: ProjectManifest;
+  objects: Array<{ file: string; source: string; compiled: string }>;
+}> {
+  const manifest = await readManifest(projectId);
+  const objects = [];
+  for (const file of manifest.objects) {
+    const source = await Deno.readTextFile(objectUrl(projectId, file));
+    const result = transpileObject(source, file);
+    objects.push({ file, source, compiled: result.output });
+  }
+  return { manifest, objects };
+}'''
+          new_load = '''async function loadProject(projectId: string): Promise<{
+  manifest: ProjectManifest;
+  objects: Array<{ file: string; source: string; compiled: string }>;
+  styles: Array<{ file: string; source: string; compiled: string; warnings: string[] }>;
+}> {
+  const manifest = await readManifest(projectId);
+  const objects = [];
+  const styles = [];
+  for (const file of manifest.objects) {
+    const source = await Deno.readTextFile(objectUrl(projectId, file));
+    const result = transpileObject(source, file);
+    objects.push({ file, source, compiled: result.output });
+  }
+  for (const file of manifest.styles) {
+    const source = await Deno.readTextFile(styleUrl(projectId, file));
+    const result = defaultStyleCompiler.compile(source, file);
+    styles.push({ file, source, compiled: result.css, warnings: result.warnings });
+  }
+  return { manifest, objects, styles };
+}'''
+          if old_load not in text: raise SystemExit('loadProject block not found')
+          text = text.replace(old_load, new_load, 1)
+
+          sanitize_loaded = '    objectFolders: normalizeFolders(explicitFolders, objects),\n    instances:'
+          if sanitize_loaded not in text: raise SystemExit('sanitize loaded marker not found')
+          text = text.replace(sanitize_loaded, '    objectFolders: normalizeFolders(explicitFolders, objects),\n    styles: Array.isArray(manifest.styles) ? manifest.styles.filter((value): value is string => typeof value === "string").map(validateStylePath) : [],\n    instances:', 1)
+
+          sanitize_current = '    objectFolders: normalizeFolders(current.objectFolders, current.objects),\n    instances: current.instances,'
+          if sanitize_current not in text: raise SystemExit('sanitize current marker not found')
+          text = text.replace(sanitize_current, '    objectFolders: normalizeFolders(current.objectFolders, current.objects),\n    styles: current.styles,\n    instances: current.instances,', 1)
+
+          object_url_marker = '''function objectFolderUrl(projectId: string, folder: string): URL {
+'''
+          style_url_fn = '''function styleUrl(projectId: string, file: string): URL {
+  return new URL(`styles/${encodeObjectPath(validateStylePath(file))}`, projectUrl(projectId));
+}
+
+''' + object_url_marker
+          if object_url_marker not in text: raise SystemExit('objectFolderUrl marker not found')
+          text = text.replace(object_url_marker, style_url_fn, 1)
+
+          validate_marker = '''function validateObjectFolder(value: string): string {
+'''
+          validate_style = '''function validateStylePath(value: string): string {
+  const normalized = value.replace(/\\\\/g, "/").replace(/^\\/+|\\/+$/g, "");
+  const segments = normalized.split("/");
+  if (!segments.length || segments.length > 8) throw new Error("Invalid style path.");
+  const file = segments.at(-1) ?? "";
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}\\.css$/i.test(file)) throw new Error("Invalid style filename.");
+  for (const folder of segments.slice(0, -1)) validateFolderSegment(folder);
+  return segments.join("/");
+}
+
+''' + validate_marker
+          if validate_marker not in text: raise SystemExit('validateObjectFolder marker not found')
+          text = text.replace(validate_marker, validate_style, 1)
+          p.write_text(text)
+
+          # Runtime preview consumes compiled project CSS without coupling DomCore to a CSS provider.
+          p = Path('src/client/runtime.ts')
+          text = p.read_text()
+          old = '''  mountPreview(root: HTMLElement): void {
+    root.replaceChildren();
+    const mounted = new Set<string>();'''
+          new = '''  mountPreview(root: HTMLElement, options: { styles?: readonly string[] } = {}): void {
+    root.replaceChildren();
+    const appRoot = document.createElement("div");
+    appRoot.className = "spork-app";
+    if (options.styles?.length) {
+      const style = document.createElement("style");
+      style.dataset.sporkProjectStyles = "";
+      style.textContent = options.styles.join("\\n");
+      root.append(style);
+    }
+    root.append(appRoot);
+    const mounted = new Set<string>();'''
+          if old not in text: raise SystemExit('mountPreview header not found')
+          text = text.replace(old, new, 1)
+          text = text.replace('mountInstance(instance, root, false);', 'mountInstance(instance, appRoot, false);')
+          text = text.replace('mountInstance({ ...instance, parent: undefined }, root, false);', 'mountInstance({ ...instance, parent: undefined }, appRoot, false);')
+          p.write_text(text)
+
+          p = Path('src/client/main.ts')
+          text = p.read_text()
+          old = '  runtime.mountPreview(previewHost);'
+          new = '  runtime.mountPreview(previewHost, { styles: project.styles.map((style) => style.compiled) });'
+          if old not in text: raise SystemExit('runtime.mountPreview call not found')
+          p.write_text(text.replace(old, new, 1))
+          PY
+      - name: Type check
+        run: deno task check
+      - name: Tests
+        run: deno task test
+      - name: Build
+        run: deno task build
+      - name: Commit style integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server.ts src/client/runtime.ts src/client/main.ts deno.lock
+          git commit -m "feat(styles): add project-owned CSS assets and preview injection (#5)"
+          git push origin HEAD:feature/project-style-pipeline
