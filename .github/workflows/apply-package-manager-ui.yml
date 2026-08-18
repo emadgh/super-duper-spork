@@ -1,0 +1,239 @@
+name: Apply package manager Studio view
+
+on:
+  push:
+    branches:
+      - feature/project-package-manager
+    paths:
+      - ".github/workflows/apply-package-manager-ui.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/project-package-manager
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Patch Studio UI
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # HTML navigator view.
+          p = Path('src/client/index.html')
+          s = p.read_text()
+          board_button = '''      <button class="activity-button" data-view="blackboard" title="Blackboard">
+        <span class="activity-glyph">▦</span><small>Board</small>
+      </button>'''
+          packages_button = board_button + '''
+      <button class="activity-button" data-view="packages" title="Packages">
+        <span class="activity-glyph">⬡</span><small>Packages</small>
+      </button>'''
+          if board_button not in s: raise RuntimeError('activity anchor missing')
+          s = s.replace(board_button, packages_button, 1)
+
+          aside_end = '''      </section>
+    </aside>
+
+    <div id="split-nav"'''
+          packages_section = '''      </section>
+
+      <section id="packages-view" class="navigator-view">
+        <div class="section-titlebar">
+          <div>
+            <span class="eyebrow">PROJECT RUNTIME</span>
+            <h2>Packages</h2>
+          </div>
+          <button id="install-packages" class="icon-button" title="Install/sync project packages">↻</button>
+        </div>
+        <div id="package-permissions" class="package-permissions"></div>
+        <div id="package-list" class="package-list"></div>
+        <div class="section-titlebar package-library-title">
+          <div><span class="eyebrow">LIBRARY</span><h3>Presets</h3></div>
+        </div>
+        <div id="package-preset-list" class="package-preset-list"></div>
+        <div class="navigator-footer">Packages are project-local. Native scripts and runtime permissions are explicit and visible before install.</div>
+      </section>
+    </aside>
+
+    <div id="split-nav"'''
+          if aside_end not in s: raise RuntimeError('navigator section anchor missing')
+          s = s.replace(aside_end, packages_section, 1)
+          p.write_text(s)
+
+          # Main client wiring.
+          p = Path('src/client/main.ts')
+          s = p.read_text()
+          s = s.replace('  PortType,\n  ProjectObjectFile,', '  PortType,\n  PackagePresetSummary,\n  ProjectObjectFile,', 1)
+          anchor = 'const addBlackboardButton = required<HTMLButtonElement>("#add-blackboard");'
+          insert = anchor + '''
+const packageList = required<HTMLElement>("#package-list");
+const packagePresetList = required<HTMLElement>("#package-preset-list");
+const packagePermissions = required<HTMLElement>("#package-permissions");
+const installPackagesButton = required<HTMLButtonElement>("#install-packages");'''
+          if anchor not in s: raise RuntimeError('main package DOM anchor missing')
+          s = s.replace(anchor, insert, 1)
+          anchor = 'let actionTemplates: ActionTemplateSummary[] | null = null;'
+          s = s.replace(anchor, anchor + '\nlet packagePresets: PackagePresetSummary[] | null = null;', 1)
+          anchor = 'addBlackboardButton.addEventListener("click", () => void addBlackboardVariable());'
+          s = s.replace(anchor, anchor + '\ninstallPackagesButton.addEventListener("click", () => void installProjectPackages());', 1)
+          anchor = '''  renderBlackboard();
+  renderEventOptions();'''
+          s = s.replace(anchor, '''  renderBlackboard();
+  void renderPackages();
+  renderEventOptions();''', 1)
+
+          function_anchor = 'function compileDefinitions(objects: ProjectObjectFile[]): Map<string, ObjectDefinition> {'
+          package_functions = r'''async function renderPackages(): Promise<void> {
+  packageList.replaceChildren();
+  packagePresetList.replaceChildren();
+  packagePermissions.replaceChildren();
+  if (!project) return;
+
+  const state = project.packages;
+  const permissions = state.effectivePermissions;
+  const chips: string[] = [];
+  if (permissions.ffi) chips.push("FFI");
+  for (const [key, values] of Object.entries(permissions)) {
+    if (key === "ffi" || !Array.isArray(values) || values.length === 0) continue;
+    chips.push(`${key}: ${values.join(", ")}`);
+  }
+  packagePermissions.innerHTML = `
+    <strong>node_modules: ${escapeHtml(state.manifest.nodeModulesDir)}</strong>
+    <small>${chips.length ? `Permissions: ${chips.map(escapeHtml).join(" · ")}` : "No extra runtime permissions"}</small>
+  `;
+
+  if (!state.manifest.packages.length) {
+    packageList.append(emptyMessage("No project packages. Add a preset below."));
+  } else {
+    for (const pkg of state.manifest.packages) {
+      const row = document.createElement("article");
+      row.className = "package-row";
+      const nativeNote = pkg.native ? "native" : pkg.role;
+      const scripts = pkg.allowScripts?.length ? `scripts: ${pkg.allowScripts.join(", ")}` : "no lifecycle scripts";
+      row.innerHTML = `
+        <div><strong>${escapeHtml(pkg.alias)}</strong><code>${escapeHtml(pkg.specifier)}</code></div>
+        <small>${escapeHtml(nativeNote)} · ${escapeHtml(scripts)}</small>
+      `;
+      const remove = document.createElement("button");
+      remove.className = "text-button danger-text";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", () => void removeProjectPackage(pkg.id));
+      row.append(remove);
+      packageList.append(row);
+    }
+  }
+
+  packagePresets ??= await api.listPackagePresets();
+  for (const preset of packagePresets) {
+    const installed = preset.packageIds.every((id) => state.manifest.packages.some((pkg) => pkg.id === id));
+    const card = document.createElement("button");
+    card.className = `package-preset${installed ? " is-installed" : ""}`;
+    card.innerHTML = `<strong>${escapeHtml(preset.name)}</strong><small>${escapeHtml(preset.description)}</small><code>${escapeHtml(preset.packageIds.join(" + "))}</code>`;
+    card.disabled = installed;
+    card.addEventListener("click", () => void addProjectPackagePreset(preset.id));
+    packagePresetList.append(card);
+  }
+}
+
+async function addProjectPackagePreset(presetId: string): Promise<void> {
+  if (!project) return;
+  try {
+    setGlobalStatus("Adding package preset…");
+    project = await api.addPackagePreset(project.manifest.id, presetId);
+    await renderPackages();
+    renderProjectMeta();
+    setGlobalStatus("Package preset added — review permissions, then Install");
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  }
+}
+
+async function removeProjectPackage(packageId: string): Promise<void> {
+  if (!project) return;
+  try {
+    project = await api.removePackage(project.manifest.id, packageId);
+    await renderPackages();
+    setGlobalStatus("Package removed");
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  }
+}
+
+async function installProjectPackages(): Promise<void> {
+  if (!project) return;
+  const packages = project.packages.manifest.packages;
+  if (!packages.length) {
+    setGlobalStatus("No packages to install", true);
+    return;
+  }
+  const native = packages.filter((pkg) => pkg.native || pkg.allowScripts?.length).map((pkg) => pkg.alias);
+  const message = native.length
+    ? `Install project packages? Native/lifecycle packages: ${native.join(", ")}. Their declared scripts and permissions will be used.`
+    : "Install/sync project packages and lockfile?";
+  if (!confirm(message)) return;
+  try {
+    installPackagesButton.disabled = true;
+    setGlobalStatus("Installing project packages…");
+    const result = await api.installPackages(project.manifest.id);
+    project = await api.loadProject(project.manifest.id);
+    await renderPackages();
+    console.info(result.output);
+    setGlobalStatus("Packages installed and lockfile synchronized");
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  } finally {
+    installPackagesButton.disabled = false;
+  }
+}
+
+'''
+          if function_anchor not in s: raise RuntimeError('function insertion anchor missing')
+          s = s.replace(function_anchor, package_functions + function_anchor, 1)
+          p.write_text(s)
+
+          # Styles.
+          p = Path('src/client/styles.css')
+          s = p.read_text()
+          s += r'''
+
+/* Project package manager */
+.package-permissions { margin: 8px 10px 10px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); display: grid; gap: 4px; }
+.package-permissions strong { font-size: 11px; color: var(--text); }
+.package-permissions small { color: var(--muted); line-height: 1.4; }
+.package-list, .package-preset-list { display: grid; gap: 6px; padding: 0 8px 8px; }
+.package-row { position: relative; display: grid; gap: 4px; padding: 9px 58px 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.package-row > div { display: grid; gap: 2px; min-width: 0; }
+.package-row strong { font-size: 12px; }
+.package-row code { overflow: hidden; color: var(--accent); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.package-row small { color: var(--muted); font-size: 10px; }
+.package-row > button { position: absolute; inset-inline-end: 8px; inset-block-start: 10px; }
+.package-library-title { margin-top: 6px; }
+.package-library-title h3 { margin: 1px 0 0; font-size: 13px; }
+.package-preset { display: grid; gap: 3px; width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); text-align: start; cursor: pointer; }
+.package-preset:hover:not(:disabled) { border-color: var(--accent); background: var(--surface-2); }
+.package-preset small { color: var(--muted); line-height: 1.35; }
+.package-preset code { color: var(--accent); font-size: 10px; }
+.package-preset.is-installed { opacity: .55; cursor: default; }
+.danger-text { color: #e67d8d; }
+'''
+          p.write_text(s)
+          PY
+      - name: Validate
+        run: |
+          deno task check
+          deno task test
+          deno task build
+      - name: Commit UI
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/client/index.html src/client/main.ts src/client/styles.css deno.lock
+          git commit -m "feat(packages): add permission-aware Studio package view (#6)"
+          git push origin HEAD:feature/project-package-manager
