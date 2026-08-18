@@ -6,6 +6,9 @@ on:
       - feature/expression-engine
     paths:
       - .github/workflows/expression-integration-patch.yml
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -22,6 +25,37 @@ jobs:
           fetch-depth: 0
       - name: Apply expression integration patch
         run: python3 scripts/patch-expression-integration.py
+      - name: Finalize parser and remove bootstrap CI wiring
+        shell: python
+        run: |
+          from pathlib import Path
+
+          expression = Path("src/client/expression.ts")
+          source = expression.read_text(encoding="utf-8")
+          old = '''    case "!==": return left !== right;
+          case "&&":
+          case "||":
+          case "??": throw new Error(`Internal expression evaluator error for ${node.operator}.`);
+          }
+          }'''.replace("          ", "")
+          new = '''    case "!==": return left !== right;
+          }
+          throw new Error("Unsupported expression operator.");
+          }'''.replace("          ", "")
+          if old not in source:
+              raise SystemExit("expression evaluator fragment not found")
+          expression.write_text(source.replace(old, new, 1), encoding="utf-8")
+
+          ci = Path(".github/workflows/ci.yml")
+          workflow = ci.read_text(encoding="utf-8")
+          begin = "      # BEGIN EXPRESSION BOOTSTRAP\n"
+          end_marker = "      # END EXPRESSION BOOTSTRAP\n"
+          if begin in workflow:
+              start = workflow.index(begin)
+              end = workflow.index(end_marker, start) + len(end_marker)
+              workflow = workflow[:start] + workflow[end:]
+          workflow = workflow.replace("permissions:\n  contents: write\n", "permissions:\n  contents: read\n", 1)
+          ci.write_text(workflow, encoding="utf-8")
       - name: Commit patch and remove one-shot files
         shell: bash
         run: |
@@ -33,7 +67,5 @@ jobs:
             echo "No patch changes to commit."
             exit 0
           fi
-          git commit -m "Wire expression bindings into editor persistence and CI"
+          git commit -m "Complete expression editor runtime and persistence integration"
           git push origin HEAD:feature/expression-engine
-
-# One-shot workflow: self-deletes after the patch commit.
