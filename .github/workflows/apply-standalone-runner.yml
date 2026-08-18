@@ -1,0 +1,234 @@
+name: Apply standalone app process runner
+
+on:
+  push:
+    branches:
+      - feature/app-runtime-kernel
+    paths:
+      - ".github/workflows/apply-standalone-runner.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/app-runtime-kernel
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Patch runner
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def patch(path, old, new, label):
+              p = Path(path)
+              s = p.read_text()
+              if old not in s:
+                  raise RuntimeError(f'missing {label} in {path}')
+              p.write_text(s.replace(old, new, 1))
+
+          # Preserve generated app data across rebuilds.
+          patch(
+              'src/server/app-builder.ts',
+              '''  await Deno.remove(outputRoot, { recursive: true }).catch((error) => {
+    if (!(error instanceof Deno.errors.NotFound)) throw error;
+  });
+  await Deno.mkdir(new URL("public/client/", outputRoot), { recursive: true });''',
+              '''  await Deno.mkdir(outputRoot, { recursive: true });
+  for (const relative of ["public/", "kernel/", "host/"]) {
+    await Deno.remove(new URL(relative, outputRoot), { recursive: true }).catch((error) => {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    });
+  }
+  for (const relative of ["deno.json", "packages.json", "run.bat", "README.txt"]) {
+    await Deno.remove(new URL(relative, outputRoot)).catch((error) => {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    });
+  }
+  await Deno.mkdir(new URL("public/client/", outputRoot), { recursive: true });''',
+              'persistent data build cleanup',
+          )
+
+          # Server app-process registry and run API.
+          p = Path('src/server.ts')
+          s = p.read_text()
+          old = 'const DIST_MODE = Deno.args.includes("--dist");\nconst PORT = 8000;'
+          new = '''const DIST_MODE = Deno.args.includes("--dist");
+const PORT = 8000;
+const APP_PORT_START = 9100;
+let nextAppPort = APP_PORT_START;
+const appProcesses = new Map<string, { child: Deno.ChildProcess; port: number; url: string }>();'''
+          if old not in s: raise RuntimeError('server constants anchor missing')
+          s = s.replace(old, new, 1)
+
+          marker = '    if (parts.length === 4 && parts[3] === "build" && request.method === "POST") {'
+          run_route = '''    if (parts.length === 4 && parts[3] === "run" && request.method === "POST") {
+      const result = await runStandaloneProject(projectId);
+      return json(result);
+    }
+
+'''
+          if marker not in s: raise RuntimeError('build API marker missing')
+          s = s.replace(marker, run_route + marker, 1)
+
+          function_marker = 'async function serveProjectApp(pathname: string): Promise<Response> {'
+          runner_functions = '''async function runStandaloneProject(projectId: string): Promise<{ ok: true; projectId: string; url: string; port: number }> {
+  await stopStandaloneProject(projectId);
+  const project = await loadProject(projectId);
+  const outputRoot = new URL(`${projectId}/`, BUILDS_DIR);
+  await buildStandaloneApp({ projectId, projectRoot: projectUrl(projectId), outputRoot, project });
+
+  const install = new Deno.Command(Deno.execPath(), {
+    cwd: outputRoot,
+    args: ["install", "--config", "deno.json"],
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const installResult = await install.output();
+  if (!installResult.success) {
+    const decoder = new TextDecoder();
+    throw new Error(`Project package install failed.\n${decoder.decode(installResult.stdout)}\n${decoder.decode(installResult.stderr)}`);
+  }
+
+  const port = reserveAppPort();
+  const child = new Deno.Command(Deno.execPath(), {
+    cwd: outputRoot,
+    args: ["task", "--config", "deno.json", "start", "--port", String(port)],
+    stdout: "inherit",
+    stderr: "inherit",
+  }).spawn();
+  const url = `http://127.0.0.1:${port}/`;
+  appProcesses.set(projectId, { child, port, url });
+
+  try {
+    await waitForApp(url, child);
+  } catch (error) {
+    appProcesses.delete(projectId);
+    try { child.kill("SIGTERM"); } catch { /* already stopped */ }
+    throw error;
+  }
+  return { ok: true, projectId, url, port };
+}
+
+async function stopStandaloneProject(projectId: string): Promise<void> {
+  const existing = appProcesses.get(projectId);
+  if (!existing) return;
+  appProcesses.delete(projectId);
+  try { existing.child.kill("SIGTERM"); } catch { /* already stopped */ }
+  await Promise.race([
+    existing.child.status.catch(() => ({ success: false, code: -1, signal: null })),
+    new Promise((resolve) => setTimeout(resolve, 750)),
+  ]);
+}
+
+function reserveAppPort(): number {
+  const port = nextAppPort;
+  nextAppPort++;
+  if (nextAppPort > 9900) nextAppPort = APP_PORT_START;
+  return port;
+}
+
+async function waitForApp(url: string, child: Deno.ChildProcess): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const status = child.status;
+    const winner = await Promise.race([
+      status.then((value) => ({ type: "status" as const, value })),
+      fetch(url, { signal: AbortSignal.timeout(400) })
+        .then((response) => ({ type: "response" as const, response }))
+        .catch((error) => ({ type: "error" as const, error })),
+    ]);
+    if (winner.type === "response" && winner.response.ok) return;
+    if (winner.type === "status") throw new Error(`Application process exited before becoming ready (code ${winner.value.code}).`);
+    if (winner.type === "error") lastError = winner.error;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Application did not become ready in time${lastError ? `: ${errorMessage(lastError)}` : "."}`);
+}
+
+'''
+          if function_marker not in s: raise RuntimeError('runner function insertion anchor missing')
+          s = s.replace(function_marker, runner_functions + function_marker, 1)
+          p.write_text(s)
+
+          # Client API.
+          p = Path('src/client/api.ts')
+          s = p.read_text()
+          anchor = '  buildProject(projectId: string): Promise<{ ok: true; projectId: string; output: string }> {'
+          method = '''  runProject(projectId: string): Promise<{ ok: true; projectId: string; url: string; port: number }> {
+    return request<{ ok: true; projectId: string; url: string; port: number }>(`/api/projects/${encodeURIComponent(projectId)}/run`, {
+      method: "POST", body: JSON.stringify({}),
+    });
+  },
+'''
+          if anchor not in s: raise RuntimeError('client build API anchor missing')
+          s = s.replace(anchor, method + anchor, 1)
+          p.write_text(s)
+
+          # Studio uses the separately hosted app origin. Even with allow-same-origin,
+          # the app cannot access Studio DOM because the port/origin is different.
+          p = Path('src/client/main.ts')
+          s = p.read_text()
+          s = s.replace('let runtime: EventRuntime | null = null;', 'let runtime: EventRuntime | null = null;\nlet previewFrame: HTMLIFrameElement | null = null;', 1)
+          old_guard = '  if (message?.source !== "spork-app" || message.version !== 1 || !project || message.projectId !== project.manifest.id) return;'
+          new_guard = '  if (message?.source !== "spork-app" || message.version !== 1 || !project || message.projectId !== project.manifest.id) return;\n  if (previewFrame?.contentWindow && event.source !== previewFrame.contentWindow) return;'
+          if old_guard not in s: raise RuntimeError('message guard anchor missing')
+          s = s.replace(old_guard, new_guard, 1)
+
+          start = s.index('async function runProject(): Promise<void> {')
+          end = s.index('\nasync function buildProject(): Promise<void> {', start)
+          new_run = '''async function runProject(): Promise<void> {
+  if (!project) return;
+  if (dirty) {
+    await saveSelectedObject();
+    if (dirty) return;
+  }
+
+  runtime?.dispose();
+  runtime = null;
+  traceRows = [];
+  liveBlackboard = null;
+  renderTrace();
+  renderBlackboard();
+
+  try {
+    runButton.disabled = true;
+    setGlobalStatus("Building and starting isolated application host…");
+    const launched = await api.runProject(project.manifest.id);
+    const iframe = document.createElement("iframe");
+    iframe.className = "app-preview-frame";
+    iframe.title = `${project.manifest.name} preview`;
+    iframe.sandbox.add("allow-scripts", "allow-same-origin", "allow-forms", "allow-modals", "allow-popups");
+    iframe.src = `${launched.url}?studio=${Date.now()}`;
+    previewFrame = iframe;
+    previewHost.replaceChildren(iframe);
+    previewPanel.classList.add("is-running");
+    setGlobalStatus(`Application host running on port ${launched.port}`);
+  } catch (error) {
+    previewFrame = null;
+    setGlobalStatus(errorMessage(error), true);
+  } finally {
+    runButton.disabled = false;
+  }
+}
+'''
+          s = s[:start] + new_run + s[end:]
+          p.write_text(s)
+          PY
+      - name: Validate
+        run: |
+          deno task check
+          deno task test
+          deno task build
+      - name: Commit runner
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server/app-builder.ts src/server.ts src/client/api.ts src/client/main.ts deno.lock
+          git commit -m "feat(kernel): run generated apps as independent processes (#7)"
+          git push origin HEAD:feature/app-runtime-kernel
