@@ -26,13 +26,14 @@ Deno.test("native package policy upgrades nodeModulesDir automatically", () => {
         role: "runtime",
         native: true,
         allowScripts: ["npm:better-sqlite3"],
-        permissions: { ffi: true },
+        permissions: { ffi: true, sys: ["cpus"] },
       },
     ],
   });
 
   assertEquals(manifest.nodeModulesDir, "auto");
   assertEquals(manifest.packages[0]?.permissions?.ffi, true);
+  assertEquals(manifest.packages[0]?.permissions?.sys?.[0], "cpus");
   assertEquals(manifest.packages[0]?.allowScripts?.[0], "npm:better-sqlite3");
 });
 
@@ -62,6 +63,8 @@ Deno.test("package presets contain database and Tailwind building blocks", () =>
   assert(PACKAGE_PRESETS.some((preset) => preset.id === "tailwind"));
   const typeorm = PACKAGE_PRESETS.find((preset) => preset.id === "typeorm");
   assertEquals(typeorm?.packages.find((item) => item.id === "typeorm")?.permissions?.envAll, true);
+  const sqlite = PACKAGE_PRESETS.find((preset) => preset.id === "better-sqlite3");
+  assertEquals(sqlite?.packages.find((item) => item.id === "better-sqlite3")?.permissions?.sys?.[0], "cpus");
 });
 
 Deno.test("package manager writes packages.json and generated deno.json", async () => {
@@ -87,6 +90,7 @@ Deno.test("package manager writes packages.json and generated deno.json", async 
     const permissions = manager.effectivePermissions(manifest);
     assertEquals(permissions.envAll, true);
     assertEquals(permissions.ffi, true);
+    assertEquals(permissions.sys?.[0], "cpus");
   } finally {
     await Deno.remove(root, { recursive: true });
   }
