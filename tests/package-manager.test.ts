@@ -36,10 +36,32 @@ Deno.test("native package policy upgrades nodeModulesDir automatically", () => {
   assertEquals(manifest.packages[0]?.allowScripts?.[0], "npm:better-sqlite3");
 });
 
+Deno.test("full environment capability is explicit and sanitized", () => {
+  const manifest = sanitizePackageManifest({
+    version: 1,
+    nodeModulesDir: "none",
+    packages: [
+      {
+        id: "typeorm",
+        alias: "typeorm",
+        specifier: "npm:typeorm@1.1.0",
+        role: "runtime",
+        permissions: { envAll: true },
+      },
+    ],
+  });
+
+  assertEquals(manifest.packages[0]?.permissions?.envAll, true);
+  const manager = new ProjectPackageManager(new URL("file:///tmp/unused/"));
+  assertEquals(manager.effectivePermissions(manifest).envAll, true);
+});
+
 Deno.test("package presets contain database and Tailwind building blocks", () => {
   assert(PACKAGE_PRESETS.some((preset) => preset.id === "typeorm"));
   assert(PACKAGE_PRESETS.some((preset) => preset.id === "better-sqlite3"));
   assert(PACKAGE_PRESETS.some((preset) => preset.id === "tailwind"));
+  const typeorm = PACKAGE_PRESETS.find((preset) => preset.id === "typeorm");
+  assertEquals(typeorm?.packages.find((item) => item.id === "typeorm")?.permissions?.envAll, true);
 });
 
 Deno.test("package manager writes packages.json and generated deno.json", async () => {
@@ -63,6 +85,7 @@ Deno.test("package manager writes packages.json and generated deno.json", async 
     assertEquals(config.compilerOptions.emitDecoratorMetadata, true);
 
     const permissions = manager.effectivePermissions(manifest);
+    assertEquals(permissions.envAll, true);
     assertEquals(permissions.ffi, true);
   } finally {
     await Deno.remove(root, { recursive: true });
