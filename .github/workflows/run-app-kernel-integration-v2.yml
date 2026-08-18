@@ -1,0 +1,47 @@
+name: Run app runtime kernel integration v2
+
+on:
+  push:
+    branches:
+      - feature/app-runtime-kernel
+    paths:
+      - ".github/workflows/run-app-kernel-integration-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/app-runtime-kernel
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Extract integration patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/apply-app-kernel.yml').read_text().splitlines()
+          start = next(i for i, line in enumerate(source) if "python3 - <<'PY'" in line) + 1
+          end = next(i for i in range(start, len(source)) if source[i].strip() == 'PY')
+          block = source[start:end]
+          normalized = '\n'.join(line[10:] if line.startswith('          ') else line for line in block)
+          Path('/tmp/app_kernel_patch.py').write_text(normalized + '\n')
+          PY
+      - name: Apply integration
+        run: python3 /tmp/app_kernel_patch.py
+      - name: Validate
+        run: |
+          deno task check
+          deno task test
+          deno task build
+      - name: Commit implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/client/runtime.ts scripts/build.ts src/server.ts src/client/api.ts src/client/main.ts src/client/index.html src/client/styles.css deno.lock
+          git commit -m "feat(kernel): integrate iframe runtime and standalone build (#7)"
+          git push origin HEAD:feature/app-runtime-kernel
