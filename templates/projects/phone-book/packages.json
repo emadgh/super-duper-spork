@@ -6,7 +6,8 @@
       "id": "typeorm",
       "alias": "typeorm",
       "specifier": "npm:typeorm@1.1.0",
-      "role": "runtime"
+      "role": "runtime",
+      "permissions": { "env": ["TINYGLOBBY_DEBUG"] }
     },
     {
       "id": "reflect-metadata",
