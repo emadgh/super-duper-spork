@@ -608,6 +608,9 @@ function transpileObject(source: string, file: string): { output: string; errors
       module: ts.ModuleKind.CommonJS,
       strict: true,
       esModuleInterop: false,
+      jsx: ts.JsxEmit.React,
+      jsxFactory: "h",
+      jsxFragmentFactory: "Fragment",
     },
   });
 
@@ -815,7 +818,7 @@ function validateObjectPath(value: string): string {
   const segments = normalized.split("/");
   if (!segments.length || segments.length > 8) throw new Error("Invalid object path.");
   const file = segments.at(-1) ?? "";
-  if (!/^[A-Za-z][A-Za-z0-9_-]{0,79}\.ts$/.test(file)) throw new Error("Invalid object filename.");
+  if (!/^[A-Za-z][A-Za-z0-9_-]{0,79}\.tsx?$/.test(file)) throw new Error("Invalid object filename.");
   for (const folder of segments.slice(0, -1)) validateFolderSegment(folder);
   return segments.join("/");
 }
