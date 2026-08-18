@@ -143,12 +143,12 @@ export class ProjectPackageManager {
     return { success: true, output };
   }
 
-  async writeDenoConfig(manifest = await this.read()): Promise<void> {
-    const clean = sanitizePackageManifest(manifest);
+  async writeDenoConfig(manifest?: ProjectPackageManifest): Promise<void> {
+    const clean = sanitizePackageManifest(manifest ?? await this.read());
     const imports = Object.fromEntries(clean.packages.map((item) => [item.alias, item.specifier]));
     const allowScripts = unique(clean.packages.flatMap((item) => item.allowScripts ?? []));
     const config: Record<string, unknown> = {
-      nodeModulesDir: clean.nodeModulesDir === "none" ? "none" : clean.nodeModulesDir,
+      nodeModulesDir: clean.nodeModulesDir,
       imports,
       lock: "deno.lock",
       compilerOptions: {
