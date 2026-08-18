@@ -62,6 +62,7 @@ const diagramEditorView = required<HTMLElement>("#diagram-editor-view");
 const previewHost = required<HTMLElement>("#preview");
 const previewPanel = required<HTMLElement>(".preview-panel");
 const runButton = required<HTMLButtonElement>("#run");
+const buildButton = required<HTMLButtonElement>("#build-project");
 const resetButton = required<HTMLButtonElement>("#reset");
 const apiSummary = required<HTMLElement>("#api-summary");
 const globalStatus = required<HTMLElement>("#global-status");
@@ -77,6 +78,7 @@ let project: LoadedProject | null = null;
 let selectedFile: string | null = null;
 let dirty = false;
 let runtime: EventRuntime | null = null;
+let previewFrame: HTMLIFrameElement | null = null;
 let definitions = new Map<string, ObjectDefinition>();
 let projectSummaries: ProjectSummary[] = [];
 let actionTemplates: ActionTemplateSummary[] | null = null;
@@ -95,6 +97,7 @@ codeEditor.onSave(() => void saveSelectedObject());
 
 saveButton.addEventListener("click", () => void saveSelectedObject());
 runButton.addEventListener("click", () => void runProject());
+buildButton.addEventListener("click", () => void buildProject());
 resetButton.addEventListener("click", () => void runProject());
 connectButton.addEventListener("click", () => void addRuleFromToolbar());
 projectSelect.addEventListener("change", () => void switchProject(projectSelect.value));
@@ -130,6 +133,18 @@ clearTraceButton.addEventListener("click", () => {
   liveBlackboard = null;
   renderTrace();
   renderBlackboard();
+});
+
+window.addEventListener("message", (event) => {
+  const message = event.data as { source?: string; version?: number; type?: string; projectId?: string; trace?: RuntimeTrace; blackboard?: Record<string, BlackboardEntry>; message?: string };
+  if (message?.source !== "spork-app" || message.version !== 1 || !project || message.projectId !== project.manifest.id) return;
+  if (previewFrame?.contentWindow && event.source !== previewFrame.contentWindow) return;
+  if (message.type === "trace" && message.trace) appendTrace(message.trace);
+  else if (message.type === "blackboard" && message.blackboard) {
+    liveBlackboard = message.blackboard;
+    renderBlackboard();
+  } else if (message.type === "ready") setGlobalStatus("Runtime running in isolated iframe");
+  else if (message.type === "error") setGlobalStatus(message.message ?? "Application runtime error", true);
 });
 
 setupNavigatorViews();
@@ -918,27 +933,49 @@ async function runProject(): Promise<void> {
   }
 
   runtime?.dispose();
+  runtime = null;
   traceRows = [];
-  renderTrace();
   liveBlackboard = null;
-  runtime = new EventRuntime(
-    definitions,
-    project.manifest.instances,
-    project.manifest.rules,
-    project.manifest.blackboard,
-    {
-      onTrace: appendTrace,
-      onBlackboardChange: (next) => {
-        liveBlackboard = next;
-        renderBlackboard();
-      },
-    },
-  );
-  liveBlackboard = runtime.getBlackboard();
+  renderTrace();
   renderBlackboard();
-  runtime.mountPreview(previewHost, { styles: project.styles.map((style) => style.compiled) });
-  previewPanel.classList.add("is-running");
-  setGlobalStatus("Runtime running");
+
+  try {
+    runButton.disabled = true;
+    setGlobalStatus("Building and starting isolated application host…");
+    const launched = await api.runProject(project.manifest.id);
+    const iframe = document.createElement("iframe");
+    iframe.className = "app-preview-frame";
+    iframe.title = `${project.manifest.name} preview`;
+    iframe.sandbox.add("allow-scripts", "allow-same-origin", "allow-forms", "allow-modals", "allow-popups");
+    iframe.src = `${launched.url}?studio=${Date.now()}`;
+    previewFrame = iframe;
+    previewHost.replaceChildren(iframe);
+    previewPanel.classList.add("is-running");
+    setGlobalStatus(`Application host running on port ${launched.port}`);
+  } catch (error) {
+    previewFrame = null;
+    setGlobalStatus(errorMessage(error), true);
+  } finally {
+    runButton.disabled = false;
+  }
+}
+
+async function buildProject(): Promise<void> {
+  if (!project) return;
+  if (dirty) {
+    await saveSelectedObject();
+    if (dirty) return;
+  }
+  try {
+    buildButton.disabled = true;
+    setGlobalStatus("Building standalone application…");
+    const result = await api.buildProject(project.manifest.id);
+    setGlobalStatus(`Standalone build ready: ${result.output}`);
+  } catch (error) {
+    setGlobalStatus(errorMessage(error), true);
+  } finally {
+    buildButton.disabled = false;
+  }
 }
 
 function appendTrace(trace: RuntimeTrace): void {

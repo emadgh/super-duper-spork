@@ -26,13 +26,13 @@ jobs:
         run: deno task test
       - name: Build
         run: deno task build
-      - name: Template and API smoke test
+      - name: Template, kernel, package and standalone smoke test
         run: |
           deno task dev > /tmp/studio-smoke.log 2>&1 &
           pid=$!
           trap 'kill "$pid" 2>/dev/null || true' EXIT
           ready=0
-          for i in $(seq 1 30); do
+          for i in $(seq 1 40); do
             if curl -fsS http://127.0.0.1:8000/api/projects > /tmp/projects.json; then
               ready=1
               break
@@ -47,6 +47,7 @@ jobs:
             cat /tmp/studio-smoke.log
             exit 1
           fi
+
           grep -F "Calculator · Modular Demo" /tmp/projects.json
           curl -fsS http://127.0.0.1:8000/api/projects/calculator-modular-demo > /tmp/calculator.json
           grep -F '"file":"UI/CalculatorShell.tsx"' /tmp/calculator.json
@@ -55,19 +56,43 @@ jobs:
           grep -F '"file":"calculator.css"' /tmp/calculator.json
           grep -F '.calculator-shell' /tmp/calculator.json
           grep -F '"packages":{"manifest":{"version":1' /tmp/calculator.json
+
           curl -fsS http://127.0.0.1:8000/api/action-library > /tmp/actions.json
           grep -F '"id":"math.add"' /tmp/actions.json
           grep -F '"id":"math.divide"' /tmp/actions.json
+
           curl -fsS http://127.0.0.1:8000/api/package-library > /tmp/packages.json
           grep -F '"id":"typeorm"' /tmp/packages.json
           grep -F '"id":"better-sqlite3"' /tmp/packages.json
           grep -F '"id":"tailwind"' /tmp/packages.json
+
+          curl -fsS http://127.0.0.1:8000/apps/calculator-modular-demo/ > /tmp/app-shell.html
+          grep -F '/app-kernel/browser.js' /tmp/app-shell.html
+          curl -fsS http://127.0.0.1:8000/apps/calculator-modular-demo/app-data.json > /tmp/app-data.json
+          grep -F '"id":"calculator-modular-demo"' /tmp/app-data.json
+          curl -fsSI http://127.0.0.1:8000/app-kernel/browser.js | tr -d '\r' | grep -i '^access-control-allow-origin: \*$'
+
           curl -fsS -X POST -H 'content-type: application/json' \
-            -d '{"presetId":"better-sqlite3"}' \
-            http://127.0.0.1:8000/api/projects/calculator-modular-demo/packages/presets > /tmp/calculator-sqlite.json
-          grep -F 'npm:better-sqlite3@13.0.2' /tmp/calculator-sqlite.json
-          grep -F '"ffi":true' /tmp/calculator-sqlite.json
-          grep -F '"nodeModulesDir":"auto"' /tmp/calculator-sqlite.json
+            -d '{}' http://127.0.0.1:8000/api/projects/calculator-modular-demo/build > /tmp/build.json
+          grep -F '"ok":true' /tmp/build.json
+          test -f workspace/builds/calculator-modular-demo/public/index.html
+          test -f workspace/builds/calculator-modular-demo/public/app-kernel/browser.js
+          test -f workspace/builds/calculator-modular-demo/kernel/standalone-server.ts
+          test -f workspace/builds/calculator-modular-demo/deno.json
+
+          curl -fsS -X POST -H 'content-type: application/json' \
+            -d '{}' http://127.0.0.1:8000/api/projects/calculator-modular-demo/run > /tmp/run.json
+          python3 - <<'PY'
+          import json
+          from urllib.request import urlopen
+          run = json.load(open('/tmp/run.json'))
+          assert run['ok'] is True
+          assert 9100 <= run['port'] <= 9900
+          body = urlopen(run['url'], timeout=5).read().decode()
+          assert '/app-kernel/browser.js' in body
+          data = urlopen(run['url'] + 'app-data.json', timeout=5).read().decode()
+          assert 'calculator-modular-demo' in data
+          PY
       - name: Package distributable
         run: |
           rm -rf artifacts package
@@ -76,6 +101,8 @@ jobs:
           cp -R templates package/templates
           cp src/server.ts package/src/server.ts
           cp -R src/server package/src/server
+          cp -R src/client package/src/client
+          cp -R src/app-kernel package/src/app-kernel
           cp deno.json deno.lock run.bat VERSION README.md package/
           (cd package && zip -qr ../artifacts/super-duper-spork-studio-build.zip .)
           git archive --format=zip --output=artifacts/super-duper-spork-studio-source.zip HEAD
