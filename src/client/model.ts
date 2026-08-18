@@ -70,10 +70,18 @@ export interface ProjectObjectFile {
   compiled: string;
 }
 
+export interface ProjectStyleFile {
+  /** Path relative to the project's styles/ directory. */
+  file: string;
+  source: string;
+  compiled: string;
+  warnings: string[];
+}
+
 export interface ProjectInstance {
   id: string;
   objectFile: string;
-  /** Per-instance configuration. A reusable component file can therefore back many component instances. */
+  /** Per-instance configuration. A reusable component file can therefore back many configured component instances. */
   props?: Record<string, unknown>;
   /** Optional visual parent. Child components mount into a named slot exposed by the parent. */
   parent?: {
@@ -118,6 +126,8 @@ export interface ProjectManifest {
   name: string;
   objects: string[];
   objectFolders: string[];
+  /** Project-owned CSS entry files, relative to styles/. */
+  styles: string[];
   instances: ProjectInstance[];
   blackboard: Record<string, BlackboardEntry>;
   rules: EventRule[];
@@ -127,6 +137,7 @@ export interface ProjectManifest {
 export interface LoadedProject {
   manifest: ProjectManifest;
   objects: ProjectObjectFile[];
+  styles: ProjectStyleFile[];
 }
 
 export interface ProjectSummary {

@@ -61,8 +61,17 @@ export class EventRuntime {
     }
   }
 
-  mountPreview(root: HTMLElement): void {
+  mountPreview(root: HTMLElement, options: { styles?: readonly string[] } = {}): void {
     root.replaceChildren();
+    const appRoot = document.createElement("div");
+    appRoot.className = "spork-app";
+    if (options.styles?.length) {
+      const style = document.createElement("style");
+      style.dataset.sporkProjectStyles = "";
+      style.textContent = options.styles.join("\n");
+      root.append(style);
+    }
+    root.append(appRoot);
     const mounted = new Set<string>();
 
     const mountInstance = (instance: ProjectInstance, target: HTMLElement, embedded: boolean): void => {
@@ -124,7 +133,7 @@ export class EventRuntime {
       }
     };
 
-    for (const instance of this.#instances.filter((item) => !item.parent)) mountInstance(instance, root, false);
+    for (const instance of this.#instances.filter((item) => !item.parent)) mountInstance(instance, appRoot, false);
 
     // Invalid/missing parents should not make a visual component disappear silently.
     for (const instance of this.#instances) {
@@ -132,7 +141,7 @@ export class EventRuntime {
       const runtimeInstance = this.#runtimeInstances.get(instance.id);
       if (!runtimeInstance || !isVisualDefinition(runtimeInstance.definition)) continue;
       this.#trace("error", `${instance.id}.mount`, "Component parent could not be resolved; mounted as a root object.");
-      mountInstance({ ...instance, parent: undefined }, root, false);
+      mountInstance({ ...instance, parent: undefined }, appRoot, false);
     }
   }
 

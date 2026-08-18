@@ -24,6 +24,16 @@ export const api = {
       method: "POST", body: JSON.stringify({ name, folder }),
     });
   },
+  addStyle(projectId: string, name: string): Promise<LoadedProject> {
+    return request<LoadedProject>(`/api/projects/${encodeURIComponent(projectId)}/styles`, {
+      method: "POST", body: JSON.stringify({ name }),
+    });
+  },
+  saveStyle(projectId: string, file: string, source: string): Promise<LoadedProject> {
+    return request<LoadedProject>(`/api/projects/${encodeURIComponent(projectId)}/styles/${encodeURIComponent(file)}`, {
+      method: "PUT", body: JSON.stringify({ source }),
+    });
+  },
   addActionTemplate(projectId: string, templateId: string, folder = ""): Promise<LoadedProject> {
     return request<LoadedProject>(`/api/projects/${encodeURIComponent(projectId)}/action-library`, {
       method: "POST", body: JSON.stringify({ templateId, folder }),
