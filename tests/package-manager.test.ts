@@ -26,14 +26,14 @@ Deno.test("native package policy upgrades nodeModulesDir automatically", () => {
         role: "runtime",
         native: true,
         allowScripts: ["npm:better-sqlite3"],
-        permissions: { ffi: true, sys: ["cpus"] },
+        permissions: { ffi: true, sys: ["cpus", "hostname", "networkInterfaces"] },
       },
     ],
   });
 
   assertEquals(manifest.nodeModulesDir, "auto");
   assertEquals(manifest.packages[0]?.permissions?.ffi, true);
-  assertEquals(manifest.packages[0]?.permissions?.sys?.[0], "cpus");
+  assertSystemReportPermissions(manifest.packages[0]?.permissions?.sys);
   assertEquals(manifest.packages[0]?.allowScripts?.[0], "npm:better-sqlite3");
 });
 
@@ -64,7 +64,7 @@ Deno.test("package presets contain database and Tailwind building blocks", () =>
   const typeorm = PACKAGE_PRESETS.find((preset) => preset.id === "typeorm");
   assertEquals(typeorm?.packages.find((item) => item.id === "typeorm")?.permissions?.envAll, true);
   const sqlite = PACKAGE_PRESETS.find((preset) => preset.id === "better-sqlite3");
-  assertEquals(sqlite?.packages.find((item) => item.id === "better-sqlite3")?.permissions?.sys?.[0], "cpus");
+  assertSystemReportPermissions(sqlite?.packages.find((item) => item.id === "better-sqlite3")?.permissions?.sys);
 });
 
 Deno.test("package manager writes packages.json and generated deno.json", async () => {
@@ -90,11 +90,18 @@ Deno.test("package manager writes packages.json and generated deno.json", async 
     const permissions = manager.effectivePermissions(manifest);
     assertEquals(permissions.envAll, true);
     assertEquals(permissions.ffi, true);
-    assertEquals(permissions.sys?.[0], "cpus");
+    assertSystemReportPermissions(permissions.sys);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
 });
+
+function assertSystemReportPermissions(value: string[] | undefined): void {
+  assertEquals(value?.length, 3);
+  assertEquals(value?.[0], "cpus");
+  assertEquals(value?.[1], "hostname");
+  assertEquals(value?.[2], "networkInterfaces");
+}
 
 function toDirUrl(path: string): URL {
   const normalized = path.replace(/\\/g, "/");
