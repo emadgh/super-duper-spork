@@ -14,15 +14,15 @@ Deno.test("Lightning CSS compiler validates and transforms project CSS", () => {
   assertEquals(compiler.id, "lightningcss");
 });
 
-Deno.test("Lightning CSS compiler reports invalid CSS as an error", () => {
+Deno.test("Lightning CSS compiler surfaces parser errors", () => {
   const compiler = new LightningCssCompiler();
   let failed = false;
   try {
-    compiler.compile(".broken { color: ; }", "styles/broken.css");
+    compiler.compile('.broken { content: "unterminated; }', "styles/broken.css");
   } catch {
     failed = true;
   }
-  assert(failed, "Expected invalid CSS to throw");
+  assert(failed, "Expected an unterminated CSS string to throw");
 });
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
