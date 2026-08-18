@@ -1,4 +1,5 @@
 import { mountDom } from "./dom-core/index.ts";
+import { evaluateExpression, type ExpressionReference } from "./expression.ts";
 import type {
   ActionStep,
   BlackboardEntry,
@@ -288,6 +289,32 @@ export class EventRuntime {
       case "state": return getPath(this.#runtimeInstances.get(binding.instanceId)?.state, binding.path);
       case "event": return getPath(eventPayload, binding.path);
       case "output": return previousOutputs.get(binding.stepId)?.[binding.name];
+      case "expression": return evaluateExpression(
+        binding.source,
+        (reference) => this.#resolveExpressionReference(reference, eventPayload, previousOutputs),
+      );
+    }
+  }
+
+  #resolveExpressionReference(
+    reference: ExpressionReference,
+    eventPayload: unknown,
+    previousOutputs: Map<string, Record<string, unknown>>,
+  ): unknown {
+    switch (reference.root) {
+      case "event": return getPath(eventPayload, reference.path.join("."));
+      case "board": {
+        const [key, ...path] = reference.path;
+        return getPath(this.#blackboard[key]?.value, path.join("."));
+      }
+      case "state": {
+        const [instanceId, ...path] = reference.path;
+        return getPath(this.#runtimeInstances.get(instanceId)?.state, path.join("."));
+      }
+      case "output": {
+        const [stepId, ...path] = reference.path;
+        return getPath(previousOutputs.get(stepId), path.join("."));
+      }
     }
   }
 
