@@ -22,7 +22,7 @@
       "role": "runtime",
       "native": true,
       "allowScripts": ["npm:better-sqlite3"],
-      "permissions": { "ffi": true }
+      "permissions": { "ffi": true, "sys": ["cpus"] }
     },
     {
       "id": "tailwindcss",
